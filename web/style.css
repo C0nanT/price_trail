@@ -52,14 +52,15 @@ button.link { height: auto; padding: 0 4px; border: 0; background: none; color: 
 .list { margin: 0 0 16px; padding: 0; list-style: none; max-height: 52vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
 .list.compact { max-height: 28vh; }
 .list:empty::after { content: "Nada aqui."; display: block; padding: 12px; color: var(--muted); }
-.item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.item:last-child { border-bottom: 0; }
-.item:hover { background: var(--raised); }
+.entry { border-bottom: 1px solid var(--line); }
+.entry:last-child { border-bottom: 0; }
+.entry:hover { background: var(--raised); }
+.entry.selected { background: var(--raised); }
+.item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px 4px; }
 .item input { margin-top: 2px; }
 .item .body { flex: 1; min-width: 0; }
 .item .title { overflow-wrap: anywhere; }
 .item .meta { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.item.selected { background: var(--raised); }
 .tag { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--raised); color: var(--muted); font-size: 12px; }
 .warn-tag, .warn { background: var(--warn-bg); color: var(--warn); }
 .warn { padding: 8px 10px; border-radius: 6px; font-size: 13px; }
@@ -74,5 +75,12 @@ button.link { height: auto; padding: 0 4px; border: 0; background: none; color: 
 .group header { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .group header input { font-weight: 600; }
 .group ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
-.group li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line); }
-.group li span { overflow-wrap: anywhere; }
+.group li { padding: 3px 0; border-top: 1px solid var(--line); }
+.group .mrow { display: flex; justify-content: space-between; gap: 8px; }
+.group .mrow span { overflow-wrap: anywhere; }
+.notes { padding: 0 10px 8px 38px; font-size: 13px; }
+.group .notes { padding: 0 0 4px; }
+.notes summary { color: var(--accent); cursor: pointer; }
+.notes ul { margin: 4px 0 0; padding: 0; list-style: none; max-height: 160px; overflow-y: auto; font-variant-numeric: tabular-nums; }
+.notes li { padding: 2px 0; border: 0; color: var(--muted); }
+.notes a { color: var(--accent); }

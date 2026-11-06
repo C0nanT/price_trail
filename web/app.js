@@ -1,5 +1,5 @@
 "use strict";
-const { products, suggestions, groups: savedGroups } = window.DATA;
+const { products, suggestions, groups: savedGroups, notes = {} } = window.DATA;
 const STORAGE_KEY = "pricetrail-groups";
 const PRICE_RATIO_WARN = 1.5;
 
@@ -45,6 +45,24 @@ const priceText = (p) => (p.min === p.max ? money.format(p.min) : `${money.forma
 const metaText = (p) =>
   `${p.store} · cód. ${p.code} · ${p.unit} · ${p.purchases} ${p.purchases === 1 ? "compra" : "compras"} · ${priceText(p)}`;
 
+const dateFormat = new Intl.DateTimeFormat("pt-BR");
+const qtyFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
+
+// "Notas (N)": abre a lista de notas onde o produto aparece, cada uma com link para o PDF.
+function notesBlock(ref) {
+  const list = notes[ref] || [];
+  if (!list.length) return make("span");
+  const items = list.map((n) => {
+    const label = `${dateFormat.format(new Date(`${n.date}T00:00:00`))} · nota ${n.number} · ${qtyFormat.format(n.quantity)} × ${money.format(n.price)}`;
+    const body = n.href
+      ? make("a", { href: n.href, target: "_blank", rel: "noopener", textContent: `${label} — abrir PDF` })
+      : make("span", { textContent: `${label} — PDF ${n.file} não encontrado em data/` });
+    return make("li", {}, body);
+  });
+  return make("details", { className: "notes" },
+    make("summary", { textContent: `Ver nota (${list.length})` }), make("ul", {}, ...items));
+}
+
 function flash(text) {
   el("status").textContent = text;
   setTimeout(() => { if (el("status").textContent === text) renderStatus(); }, 2500);
@@ -78,9 +96,9 @@ function renderProducts() {
     box.addEventListener("change", () => toggle(p.ref, box.checked));
     const meta = make("div", { className: "meta", textContent: metaText(p) });
     if (taken.has(p.ref)) meta.append(" ", make("span", { className: "tag", textContent: `em: ${taken.get(p.ref)}` }));
-    const label = make("label", { className: "item" + (selected.has(p.ref) ? " selected" : "") },
+    const label = make("label", { className: "item" },
       box, make("div", { className: "body" }, make("div", { className: "title", textContent: p.description }), meta));
-    return make("li", {}, label);
+    return make("li", { className: "entry" + (selected.has(p.ref) ? " selected" : "") }, label, notesBlock(p.ref));
   }));
 }
 
@@ -109,9 +127,11 @@ function renderDraft() {
   el("draft").replaceChildren(...items.map((p) => {
     const remove = make("button", { className: "link", type: "button", textContent: "tirar" });
     remove.addEventListener("click", () => toggle(p.ref, false));
-    return make("li", { className: "item" },
-      make("div", { className: "body" }, make("div", { className: "title", textContent: p.description }),
-        make("div", { className: "meta", textContent: metaText(p) })), remove);
+    return make("li", { className: "entry" },
+      make("div", { className: "item" },
+        make("div", { className: "body" }, make("div", { className: "title", textContent: p.description }),
+          make("div", { className: "meta", textContent: metaText(p) })), remove),
+      notesBlock(p.ref));
   }));
   const warnings = draftWarnings(items);
   el("draft-warn").hidden = warnings.length === 0;
@@ -190,7 +210,7 @@ function renderGroups() {
         renderAll();
       });
       const text = p ? `${p.description} · cód. ${p.code} · ${p.unit} · ${priceText(p)}` : `${ref} (descrição exata, fora do banco atual)`;
-      return make("li", {}, make("span", { textContent: text }), remove);
+      return make("li", {}, make("div", { className: "mrow" }, make("span", { textContent: text }), remove), notesBlock(ref));
     });
     return make("li", { className: "group" }, make("header", {}, nameInput, del), make("ul", {}, ...members));
   }));

@@ -9,11 +9,14 @@ Rode de novo depois de importar notas.
 """
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
+from pricetrail import ACCESS_KEY_RE, NoteError, extract_text, find_pdfs
 from products import ProductsError, drop_rejected, load_groups, load_rejected, suggest_groups
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -37,7 +40,50 @@ def load_rows(db_path: Path) -> list[dict]:
     return rows
 
 
-def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict, rejected: set[str] = frozenset()) -> dict:
+NOTES_QUERY = """
+SELECT substr(n.seller_cnpj, 1, 8) || ':' || i.product_code AS ref,
+       n.issued_at, n.source_file, n.number, n.access_key,
+       SUM(i.quantity) AS quantity, MIN(i.unit_price) AS price
+FROM items i JOIN notes n USING (access_key)
+GROUP BY n.access_key, i.product_code
+ORDER BY n.issued_at DESC
+"""
+
+
+def pdf_index(data_dir: Path) -> tuple[dict[str, Path], dict[str, Path]]:
+    """PDFs por chave de acesso (lida do conteúdo, resiste a renomear) e por nome."""
+    by_key, by_name = {}, {}
+    if not data_dir.is_dir():
+        return by_key, by_name
+    for pdf in find_pdfs(data_dir):
+        by_name.setdefault(pdf.name, pdf)
+        try:
+            match = ACCESS_KEY_RE.search(extract_text(pdf))
+        except (NoteError, OSError):
+            continue
+        if match:
+            by_key.setdefault("".join(match[1].split()), pdf)
+    return by_key, by_name
+
+
+def load_notes(db_path: Path, data_dir: Path, out_dir: Path) -> dict[str, list[dict]]:
+    """Notas em que cada produto aparece, com o caminho do PDF relativo à página."""
+    by_key, by_name = pdf_index(data_dir)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    notes: dict[str, list[dict]] = {}
+    for ref, issued_at, source, number, key, quantity, price in conn.execute(NOTES_QUERY):
+        pdf = by_key.get(key) or by_name.get(source)
+        href = quote(os.path.relpath(pdf, out_dir).replace(os.sep, "/")) if pdf else None
+        notes.setdefault(ref, []).append(
+            {"date": issued_at[:10], "number": number, "file": source, "href": href,
+             "quantity": quantity, "price": price}
+        )
+    conn.close()
+    return notes
+
+
+def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict, rejected: set[str] = frozenset(),
+               notes: dict[str, list[dict]] | None = None) -> dict:
     products = {}
     for row in sorted(rows, key=lambda r: r["last"]):  # a descrição mais recente vence
         ref = f"{row['cnpj'][:8]}:{row['code']}"
@@ -60,12 +106,13 @@ def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict, rej
         {"name": s["name"], "reason": s["reason"], "refs": s["refs"], "warnings": s["warnings"]}
         for s in drop_rejected(suggest_groups(rows), set(rejected))
     ]
-    return {"products": listing, "suggestions": suggestions, "groups": groups}
+    return {"notes": notes or {}, "products": listing, "suggestions": suggestions, "groups": groups}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Gera a página de agrupamento de produtos.")
     parser.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
+    parser.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta dos PDFs")
     parser.add_argument("--out", type=Path, default=PROJECT_DIR / "group_page")
     args = parser.parse_args()
     if not args.db.is_file():
@@ -80,8 +127,9 @@ def main() -> int:
     stores_file = PROJECT_DIR / "stores.json"
     stores = json.loads(stores_file.read_text(encoding="utf-8")) if stores_file.is_file() else {}
 
-    data = build_data(load_rows(args.db), groups, stores, rejected)
     args.out.mkdir(exist_ok=True)
+    notes = load_notes(args.db, args.data, args.out)
+    data = build_data(load_rows(args.db), groups, stores, rejected, notes)
     for name in STATIC_FILES:
         shutil.copy(WEB_DIR / name, args.out / name)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")

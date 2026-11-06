@@ -129,6 +129,10 @@ python3 group_page.py
 xdg-open group_page/index.html
 ```
 
+Cada produto tem "Ver nota (N)", com a lista das notas onde ele aparece e um link para
+abrir o PDF (da pasta `data/`, achado pela chave de acesso mesmo se o arquivo foi
+renomeado). Use Ctrl+F no PDF para achar o item.
+
 Nela você marca produtos (ou clica numa sugestão), dá um nome, cria o grupo e
 exporta o `products.json` (Baixar, Copiar ou, no Chrome, Salvar direto). Ela já
 carrega os grupos do `products.json` atual, então dá para renomear, tirar produtos
