@@ -86,7 +86,7 @@ def find_pdfs(folder: Path) -> list[Path]:
     return sorted(p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf")
 
 
-def import_folder(folder: Path, db: Path, stores: Path, log_file: Path) -> int:
+def import_folder(folder: Path, db: Path, stores: Path, log_file: Path, legacy_dir: Path | None = None) -> int:
     """Importa os PDFs da pasta. Retorna o código de saída (0, 1 com erros, 2 sem pasta)."""
     logging.basicConfig(
         filename=log_file,
@@ -102,7 +102,7 @@ def import_folder(folder: Path, db: Path, stores: Path, log_file: Path) -> int:
         print(f"pasta não encontrada: {folder}", file=sys.stderr)
         return 2
 
-    conn = connect(db)
+    conn = connect(db, legacy_dir)
 
     known_stores = load_known_stores(stores)
     warned_stores: set[str] = set()

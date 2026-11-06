@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Histórico de preços</title>
+<link rel="stylesheet" href="/static/chart/style.css">
+</head>
+<body>
+<main>
+  <h1>Histórico de preços</h1>
+  <div class="controls">
+    <label>Categoria <select id="category"></select></label>
+    <label>Estabelecimento <select id="store"></select></label>
+    <label>Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off"></label>
+    <label>Produto <select id="product"></select></label>
+    <label>De <input id="from" type="date"></label>
+    <label>Até <input id="to" type="date"></label>
+    <label>Ordenar por
+      <select id="sort">
+        <option value="purchases">Mais compras</option>
+        <option value="name">Nome</option>
+        <option value="rise">Maior alta</option>
+        <option value="drop">Maior queda</option>
+      </select>
+    </label>
+  </div>
+  <section id="details" hidden>
+    <h2 id="title"></h2>
+    <p class="subtitle" id="subtitle"></p>
+    <p class="variation" id="variation"></p>
+    <div class="check">
+      <div class="average">Média dos preços <strong id="average"></strong></div>
+      <label>Preço atual (R$) <input id="current" inputmode="decimal" placeholder="Ex.: 7,99" autocomplete="off"></label>
+      <div id="verdict" aria-live="polite"></div>
+    </div>
+    <div id="chart"><div id="tooltip" hidden><strong></strong><span></span><span></span></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th><th>Loja</th><th class="number">Preço</th>
+            <th class="number">Quantidade</th><th class="number">Total</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="note">Preços como impressos na nota. Descontos no total da compra não estão incluídos.</p>
+  </section>
+  <p id="empty" hidden>Nenhum produto encontrado com esses filtros.</p>
+  <p id="error" role="alert" hidden></p>
+</main>
+<script src="/static/chart/app.js"></script>
+</body>
+</html>
