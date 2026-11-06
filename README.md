@@ -27,13 +27,13 @@ Salve a nota como PDF a partir dessa página e coloque o arquivo em `data/`.
 3. Rode o script:
 
    ```bash
-   python3 pricetrail.py
+   python3 -m pricetrail import
    ```
 
 Para usar outra pasta ou outro banco:
 
 ```bash
-python3 pricetrail.py outra/pasta --db outro.sqlite
+python3 -m pricetrail import outra/pasta --db outro.sqlite
 ```
 
 Pode rodar quantas vezes quiser. A nota é identificada pela chave de acesso,
@@ -111,7 +111,7 @@ Até agora, o script só foi testado com uma nota do Atacadão. Notas de outras
 lojas podem aparecer como `ERRO` se o layout for diferente.
 
 Mantenha os PDFs em `data/`. Se o formato do banco mudar, eles permitem recriá-lo:
-apague `pricetrail.sqlite` e rode o script de novo.
+apague `pricetrail.sqlite` e rode a importação de novo.
 
 ## Juntar o mesmo produto (products.json)
 

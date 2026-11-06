@@ -1,5 +1,5 @@
 """Gera texto de NFC-e sintético (como o pdftotext -layout devolve) com chave válida."""
-from pricetrail import access_key_is_valid
+from pricetrail.nfce import access_key_is_valid
 
 CNPJ = "75315333029000"
 

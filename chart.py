@@ -591,7 +591,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.db.is_file():
-        print(f"banco não encontrado: {args.db}. Rode pricetrail.py primeiro.", file=sys.stderr)
+        print(f"banco não encontrado: {args.db}. Rode python3 -m pricetrail import primeiro.", file=sys.stderr)
         return 2
 
     try:

@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 import chart
-import pricetrail as pt
+from pricetrail import importer, nfce
+from pricetrail.db import SCHEMA
 from products import ProductsError, Resolver, drop_rejected, load_groups, load_rejected, normalize, suggest_groups
 from tests.fixtures import make_text
 
@@ -124,13 +125,13 @@ class ChartGroupingTests(unittest.TestCase):
     def build_db(self, tmp):
         db = Path(tmp) / "t.sqlite"
         conn = sqlite3.connect(db)
-        conn.executescript(pt.SCHEMA)
+        conn.executescript(SCHEMA)
         # duas notas com o mesmo produto sob códigos diferentes
         for number, code, price, total in [(1, "10", "5,00", "5,00"), (2, "11", "6,00", "6,00")]:
-            note = pt.parse_note(make_text(
+            note = nfce.parse_note(make_text(
                 [("DET YPE", code, "1", "UND9", price, total)],
                 total=total, discount="", paid=total, number=number))
-            pt.save_note(conn, note, f"{number}.pdf")
+            importer.save_note(conn, note, f"{number}.pdf")
         conn.close()
         return db
 
@@ -151,12 +152,12 @@ class ChartGroupingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "t.sqlite"
             conn = sqlite3.connect(db)
-            conn.executescript(pt.SCHEMA)
+            conn.executescript(SCHEMA)
             for number, unit in [(1, "UND9"), (2, "KG9")]:
-                note = pt.parse_note(make_text(
+                note = nfce.parse_note(make_text(
                     [("QJO", str(number), "1", unit, "5", "5,00")],
                     total="5,00", discount="", paid="5,00", number=number))
-                pt.save_note(conn, note, f"{number}.pdf")
+                importer.save_note(conn, note, f"{number}.pdf")
             conn.close()
             merged = chart.load_products(db, {}, Resolver({"Queijo": ["QJO"]}))
             self.assertEqual(len(merged), 2)

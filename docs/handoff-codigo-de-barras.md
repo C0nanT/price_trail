@@ -9,8 +9,8 @@ Facilitar a busca de um produto na página `chart.html` usando o código de barr
 
 ## Descobertas
 
-- O `pricetrail.py` lê PDFs de NFC-e da SEF/SC. A nota traz só o **código interno
-  da loja**, não o EAN (comentário na linha 40 de `pricetrail.py`).
+- O pacote `pricetrail` lê PDFs de NFC-e da SEF/SC. A nota traz só o **código interno
+  da loja**, não o EAN (comentário em `pricetrail/nfce.py`).
 - No banco `pricetrail.sqlite`, os 303 produtos têm códigos curtos (ex.: `84323`).
   Nenhum tem 12 ou 13 dígitos. Não existe casamento automático EAN -> produto.
 - O EAN sozinho não dá o nome do produto. O prefixo `789` é Brasil e os dígitos
@@ -39,7 +39,7 @@ Itens Melitta no banco, todos do ATACADAO S.A.:
 
 1. **Tabela de apelidos** `ean_alias (ean TEXT PRIMARY KEY, seller_cnpj, product_code, unit)`
    no SQLite, preenchida à mão uma vez por produto. Um comando simples, por
-   exemplo `python3 pricetrail.py --ean 7891021007177 --produto 84323`, ou um
+   exemplo `python3 -m pricetrail --ean 7891021007177 --produto 84323`, ou um
    arquivo `data/eans.csv` lido na importação.
 2. Em `chart.py`, `load_products` inclui o campo `eans` de cada produto no JSON.
    A busca de `fillOptions` passa a comparar também com os EANs.

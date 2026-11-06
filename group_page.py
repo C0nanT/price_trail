@@ -16,7 +16,8 @@ import sys
 from pathlib import Path
 from urllib.parse import quote
 
-from pricetrail import ACCESS_KEY_RE, NoteError, extract_text, find_pdfs
+from pricetrail.importer import extract_text, find_pdfs
+from pricetrail.nfce import ACCESS_KEY_RE, NoteError
 from products import ProductsError, drop_rejected, load_groups, load_rejected, suggest_groups
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -116,7 +117,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=PROJECT_DIR / "group_page")
     args = parser.parse_args()
     if not args.db.is_file():
-        print(f"banco não encontrado: {args.db}. Rode pricetrail.py primeiro.", file=sys.stderr)
+        print(f"banco não encontrado: {args.db}. Rode python3 -m pricetrail import primeiro.", file=sys.stderr)
         return 2
     try:
         groups = load_groups(PROJECT_DIR / "products.json")
