@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
+STORES_FILE = PROJECT_DIR / "stores.json"
 
 # Linhas repetidas de um produto na mesma nota e com o mesmo preço viram uma compra.
 QUERY = """
@@ -62,8 +63,8 @@ h1 { margin: 0 0 20px; font-size: 24px; line-height: 1.2; }
 h2 { margin: 0; font-size: 19px; line-height: 1.3; overflow-wrap: anywhere; }
 .controls { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
 .controls label { display: grid; gap: 4px; font-size: 13px; color: var(--text-secondary); }
-.controls label:first-child { flex: 1 1 200px; }
-.controls label:last-child { flex: 2 1 300px; min-width: 0; }
+.controls label { flex: 1 1 160px; min-width: 0; }
+.controls label:last-child { flex: 2 1 300px; }
 input, select {
   width: 100%;
   height: 40px;
@@ -120,6 +121,8 @@ th:last-child, td:last-child { padding-right: 0; }
 <main>
   <h1>Histórico de preços</h1>
   <div class="controls">
+    <label>Categoria <select id="category"></select></label>
+    <label>Estabelecimento <select id="store"></select></label>
     <label>Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off"></label>
     <label>Produto <select id="product"></select></label>
   </div>
@@ -156,6 +159,9 @@ const MARGIN = { top: 28, right: 28, bottom: 28, left: 48 };
 const el = (id) => document.getElementById(id);
 const search = el("search");
 const select = el("product");
+const categorySelect = el("category");
+const storeSelect = el("store");
+const ALL = "";
 const chart = el("chart");
 const tooltip = el("tooltip");
 
@@ -191,9 +197,22 @@ function niceTicks(maxValue) {
   return ticks;
 }
 
+function fillSelect(node, values, allLabel) {
+  const previous = node.value;
+  node.replaceChildren(new Option(allLabel, ALL), ...values.map((value) => new Option(value, value)));
+  if (values.includes(previous)) node.value = previous;
+}
+
+function fillStores() {
+  const inCategory = products.filter((p) => !categorySelect.value || p.category === categorySelect.value);
+  fillSelect(storeSelect, [...new Set(inCategory.map((p) => p.store))].sort(), "Todos");
+}
+
 function fillOptions() {
   const terms = normalize(search.value).split(/\s+/).filter(Boolean);
   const matches = products.filter((product) => {
+    if (categorySelect.value && product.category !== categorySelect.value) return false;
+    if (storeSelect.value && product.store !== storeSelect.value) return false;
     const haystack = normalize(`${product.description} ${product.code} ${product.seller}`);
     return terms.every((term) => haystack.includes(term));
   });
@@ -402,9 +421,13 @@ for (const product of products) {
 }
 
 search.addEventListener("input", fillOptions);
+categorySelect.addEventListener("change", () => { fillStores(); fillOptions(); });
+storeSelect.addEventListener("change", fillOptions);
 select.addEventListener("change", render);
 el("current").addEventListener("input", render);
 new ResizeObserver(render).observe(chart);
+fillSelect(categorySelect, [...new Set(products.map((p) => p.category))].sort(), "Todas");
+fillStores();
 fillOptions();
 </script>
 </body>
@@ -412,18 +435,28 @@ fillOptions();
 """
 
 
-def load_products(db_path: Path) -> list[dict]:
+def load_stores(path: Path) -> dict[str, dict]:
+    """Mapeia a raiz do CNPJ (8 dígitos, igual em todas as filiais) para loja e categoria."""
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_products(db_path: Path, stores: dict[str, dict]) -> list[dict]:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     products: dict[tuple, dict] = {}
     for row in conn.execute(QUERY):
         key = (row["seller_cnpj"], row["product_code"], row["unit"])
+        known = stores.get(row["seller_cnpj"][:8], {})
         product = products.setdefault(
             key,
             {
                 "code": row["product_code"],
                 "description": row["description"],
                 "seller": row["seller_name"],
+                "store": known.get("store", row["seller_name"]),
+                "category": known.get("category", "Outros"),
                 "unit": row["unit"],
                 "purchases": [],
             },
@@ -453,7 +486,7 @@ def main() -> int:
         print(f"banco não encontrado: {args.db}. Rode pricetrail.py primeiro.", file=sys.stderr)
         return 2
 
-    products = load_products(args.db)
+    products = load_products(args.db, load_stores(STORES_FILE))
     data = json.dumps(products, ensure_ascii=False).replace("</", "<\\/")
     args.out.write_text(TEMPLATE.replace("__DATA__", data), encoding="utf-8")
     print(f"{len(products)} produtos em {args.out}")

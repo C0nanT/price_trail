@@ -7,6 +7,7 @@ Requer `pdftotext` (poppler-utils). Reimportar é seguro: a nota é identificada
 pela chave de acesso, não pelo arquivo. O CPF do consumidor não é armazenado.
 """
 import argparse
+import logging
 import re
 import sqlite3
 import subprocess
@@ -74,9 +75,11 @@ HEADER_RE = re.compile(
 )
 ITEM_RE = re.compile(
     r"(?P<description>.+?)\s*\(Código:\s*(?P<code>[^)]*?)\s*\)\s*"
+    r"(?:(?P<total_before>[\d.,]+)\s*)?"  # farmácia: total logo após o código
     r"Qtde\.:\s*(?P<quantity>[\d.,]+)\s*"
     r"UN:\s*(?P<unit>\S*?)\s*"
-    r"Vl\. Unit\.:\s*(?P<unit_price>[\d.,]+)\s+(?P<total>[\d.,]+)",
+    r"Vl\. Unit\.:\s*(?P<unit_price>[\d.,]+)"
+    r"(?(total_before)|\s+(?P<total_after>[\d.,]+))",  # Atacadão: total após o preço
     re.S,
 )
 # Texto entre itens (ex.: cabeçalho/rodapé de impressão do navegador) cai na descrição
@@ -210,7 +213,7 @@ def parse_items(body: str) -> list[Item]:
                 unit=unit,
                 unit_price=unit_price,
                 price_per_kg=compute_price_per_kg(description, unit, unit_price),
-                total_cents=to_cents(match["total"]),
+                total_cents=to_cents(match["total_before"] or match["total_after"]),
             )
         )
     leftover = squeeze(body[end:])
@@ -228,9 +231,12 @@ def parse_note(text: str) -> Note:
     key = re.sub(r"\s", "", require(ACCESS_KEY_RE, text, "chave de acesso")[1])
     issue = require(ISSUE_RE, text, "número/série/emissão")
     item_count = int(require(ITEM_COUNT_RE, text, "quantidade de itens")[1])
-    total_cents = to_cents(require(TOTAL_RE, text, "valor total")[1])
     paid_cents = to_cents(require(PAID_RE, text, "valor a pagar")[1])
     discount = DISCOUNT_RE.search(text)
+    discount_cents = to_cents(discount[1]) if discount else 0
+    # Sem desconto algumas notas omitem "Valor total"; ele é igual ao valor a pagar.
+    total = TOTAL_RE.search(text)
+    total_cents = to_cents(total[1]) if total else paid_cents + discount_cents
     cnpj = re.sub(r"\D", "", header["cnpj"])
 
     if not access_key_is_valid(key):
@@ -257,7 +263,7 @@ def parse_note(text: str) -> Note:
         series=int(issue["series"]),
         issued_at=datetime.strptime(issue["issued_at"], "%d/%m/%Y %H:%M:%S").isoformat(),
         total_cents=total_cents,
-        discount_cents=to_cents(discount[1]) if discount else 0,
+        discount_cents=discount_cents,
         paid_cents=paid_cents,
         items=items,
     )
@@ -314,9 +320,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Importa PDFs de NFC-e para SQLite.")
     parser.add_argument("folder", nargs="?", type=Path, default=PROJECT_DIR / "data")
     parser.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
+    parser.add_argument("--log", type=Path, default=PROJECT_DIR / "pricetrail.log")
     args = parser.parse_args()
 
+    logging.basicConfig(
+        filename=args.log,
+        encoding="utf-8",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    log = logging.getLogger("pricetrail")
+    log.info("importação iniciada: pasta=%s db=%s", args.folder, args.db)
+
     if not args.folder.is_dir():
+        log.error("pasta não encontrada: %s", args.folder)
         print(f"pasta não encontrada: {args.folder}", file=sys.stderr)
         return 2
 
@@ -330,7 +347,13 @@ def main() -> int:
             note = parse_note(extract_text(path))
         except NoteError as error:
             failed += 1
+            log.error("%s: %s", path, error)
             print(f"ERRO   {path.name}: {error}", file=sys.stderr)
+            continue
+        except Exception:
+            failed += 1
+            log.exception("%s: erro inesperado", path)
+            print(f"ERRO   {path.name}: erro inesperado (ver {args.log.name})", file=sys.stderr)
             continue
         if save_note(conn, note, path.name):
             imported += 1
@@ -340,7 +363,9 @@ def main() -> int:
             print(f"JÁ TEM {path.name}: chave {note.access_key}")
     conn.close()
 
-    print(f"{imported} novas, {skipped} já existentes, {failed} com erro")
+    summary = f"{imported} novas, {skipped} já existentes, {failed} com erro"
+    log.info(summary)
+    print(summary)
     return 1 if failed else 0
 
 

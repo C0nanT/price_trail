@@ -48,9 +48,15 @@ python3 chart.py
 xdg-open chart.html
 ```
 
-Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
+Filtre por categoria (Mercado, Farmácia…) e, dentro dela, por estabelecimento
+(Atacadão, Farmácia Preço Popular…). Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
 maior preço e a tabela de compras. A página funciona offline. Rode `chart.py` de
 novo sempre que importar notas.
+
+As categorias e os nomes dos estabelecimentos vêm de `stores.json`, indexado pelos 8
+primeiros dígitos do CNPJ (iguais em todas as filiais). Para cadastrar uma loja nova,
+adicione uma linha, por exemplo `"12345678": {"store": "Imperatriz", "category": "Mercado"}`.
+Loja fora do arquivo aparece com o nome da nota e a categoria "Outros".
 
 ## O que aparece na saída
 
