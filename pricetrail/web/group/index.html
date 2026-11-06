@@ -12,13 +12,11 @@
   <a href="/">Ver gráfico</a>
   <div class="actions">
     <span id="status" role="status" aria-live="polite"></span>
-    <button id="save" hidden>Salvar products.json</button>
-    <button id="copy">Copiar JSON</button>
-    <button id="download" class="primary">Baixar products.json</button>
   </div>
 </header>
 
 <p id="error" class="warn" role="alert" hidden></p>
+<p id="save-error" class="warn" role="alert" hidden></p>
 <main>
   <section class="panel" aria-labelledby="h-products">
     <h2 id="h-products">Produtos <small id="count"></small></h2>
@@ -54,7 +52,16 @@
     <h2 id="h-groups">Grupos <small id="group-count"></small></h2>
     <ul id="groups" class="groups"></ul>
   </section>
+
+  <section class="panel wide" aria-labelledby="h-stores">
+    <h2 id="h-stores">Lojas <small id="stores-count"></small></h2>
+    <p id="stores-error" class="warn" role="alert" hidden></p>
+    <p class="hint">Sem cadastro, a loja usa o nome da nota e a categoria "Outros".</p>
+    <ul id="stores-missing" class="list"></ul>
+    <ul id="stores-known" class="list"></ul>
+  </section>
 </main>
 <script src="/static/group/app.js"></script>
+<script src="/static/group/stores.js"></script>
 </body>
 </html>

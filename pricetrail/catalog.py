@@ -247,6 +247,46 @@ def list_suggestions(rows: list[dict], rejected: set[tuple]) -> list[dict]:
     ]
 
 
+class GroupsError(ValueError):
+    """Grupos que violam as regras; a mensagem é mostrada ao usuário."""
+
+
+def validate_groups(pairs: list[tuple[str, object]]) -> list[tuple[str, list[str]]]:
+    """Confere nomes e referências e devolve (nome, refs) limpos; levanta GroupsError."""
+    result: list[tuple[str, list[str]]] = []
+    names: set[str] = set()
+    owner: dict[str, str] = {}
+    for raw_name, refs in pairs:
+        name = raw_name.strip()
+        if not name:
+            raise GroupsError("Todo grupo precisa de um nome.")
+        if name in names:
+            raise GroupsError(f"O nome “{name}” aparece em mais de um grupo.")
+        names.add(name)
+        if not isinstance(refs, list) or not refs:
+            raise GroupsError(f"O grupo “{name}” precisa de uma lista de produtos.")
+        for ref in refs:
+            if not isinstance(ref, str) or not CODE_REF_RE.match(ref):
+                raise GroupsError(f"“{ref}” no grupo “{name}” não é uma referência raiz:código.")
+            if owner.setdefault(ref, name) != name:
+                raise GroupsError(f"O produto {ref} está nos grupos “{owner[ref]}” e “{name}”.")
+        result.append((name, list(dict.fromkeys(refs))))
+    return result
+
+
+def replace_groups(conn: sqlite3.Connection, pairs: list[tuple[str, object]]) -> None:
+    """Troca todos os grupos numa transação: se algo falhar, nada muda."""
+    groups = validate_groups(pairs)
+    with conn:
+        conn.execute("DELETE FROM product_groups")  # group_refs sai junto, por cascata
+        for name, refs in groups:
+            group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
+            conn.executemany(
+                "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
+                [(group_id, *ref.split(":", 1)) for ref in refs],
+            )
+
+
 def list_groups(conn: sqlite3.Connection) -> dict[str, list[str]]:
     groups: dict[str, list[str]] = {}
     for row in conn.execute(GROUPS_QUERY):
@@ -273,6 +313,53 @@ def list_notes(conn: sqlite3.Connection, data_dir: Path) -> dict[str, list[dict]
             }
         )
     return notes
+
+
+STORES_QUERY = "SELECT cnpj_root, store, category FROM stores ORDER BY store, cnpj_root"
+
+# Uma linha por raiz presente nas notas; o nome é o da nota mais recente.
+UNREGISTERED_QUERY = """
+SELECT substr(n.seller_cnpj, 1, 8) AS cnpj_root, n.seller_name AS name, COUNT(*) AS notes, MAX(n.issued_at) AS last
+FROM notes n
+WHERE substr(n.seller_cnpj, 1, 8) NOT IN (SELECT cnpj_root FROM stores)
+GROUP BY substr(n.seller_cnpj, 1, 8)
+ORDER BY name
+"""
+
+DEFAULT_CATEGORY = "Outros"
+
+
+class StoreError(ValueError):
+    """Cadastro de loja inválido; a mensagem é mostrada ao usuário."""
+
+
+def list_stores(conn: sqlite3.Connection) -> dict:
+    """Lojas cadastradas e raízes de CNPJ das notas que ainda não têm cadastro."""
+    return {
+        "stores": [dict(row) for row in conn.execute(STORES_QUERY)],
+        "unregistered": [dict(row) for row in conn.execute(UNREGISTERED_QUERY)],
+    }
+
+
+def is_registered_store(conn: sqlite3.Connection, cnpj_root: str) -> bool:
+    return conn.execute("SELECT 1 FROM stores WHERE cnpj_root = ?", (cnpj_root,)).fetchone() is not None
+
+
+def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dict:
+    """Cria ou atualiza a loja. Categoria vazia vira "Outros"."""
+    if not (len(cnpj_root) == 8 and cnpj_root.isascii() and cnpj_root.isdigit()):
+        raise StoreError("a raiz do CNPJ deve ter 8 dígitos")
+    if not isinstance(store, str) or not store.strip():
+        raise StoreError("o nome da loja não pode ser vazio")
+    category = category.strip() if isinstance(category, str) else ""
+    row = {"cnpj_root": cnpj_root, "store": store.strip(), "category": category or DEFAULT_CATEGORY}
+    with conn:
+        conn.execute(
+            "INSERT INTO stores (cnpj_root, store, category) VALUES (:cnpj_root, :store, :category) "
+            "ON CONFLICT(cnpj_root) DO UPDATE SET store = excluded.store, category = excluded.category",
+            row,
+        )
+    return row
 
 
 def load_rejected_pairs(conn: sqlite3.Connection) -> set[tuple]:

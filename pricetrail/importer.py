@@ -1,10 +1,10 @@
 """Importa PDFs de NFC-e: encontra, extrai o texto, chama o parser e grava."""
-import json
 import logging
 import sqlite3
 import sys
 from pathlib import Path
 
+from .catalog import is_registered_store
 from .db import connect
 from .nfce import Note, NoteError, parse_note
 from .pdfs import extract_text, find_pdfs, path_in_data
@@ -70,20 +70,8 @@ def update_source_path(conn: sqlite3.Connection, access_key: str, source_path: s
         )
 
 
-def load_known_stores(path: Path) -> set[str]:
-    """Prefixos de CNPJ (8 dígitos) cadastrados em stores.json; vazio se ausente."""
-    try:
-        return set(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        return set()
-
-
-def is_unknown_store(cnpj: str, known: set[str]) -> bool:
-    return cnpj[:8] not in known
-
-
 def import_folder(
-    folder: Path, db: Path, stores: Path, log_file: Path, data_dir: Path, legacy_dir: Path | None = None
+    folder: Path, db: Path, log_file: Path, data_dir: Path, legacy_dir: Path | None = None
 ) -> int:
     """Importa os PDFs da pasta. Retorna o código de saída (0, 1 com erros, 2 sem pasta).
 
@@ -111,7 +99,6 @@ def import_folder(
         log.warning(message)
         print(f"AVISO  {message}", file=sys.stderr)
 
-    known_stores = load_known_stores(stores)
     warned_stores: set[str] = set()
     imported = skipped = failed = 0
     for path in find_pdfs(folder):
@@ -128,11 +115,11 @@ def import_folder(
             print(f"ERRO   {path.name}: erro inesperado (ver {log_file.name})", file=sys.stderr)
             continue
         prefix = note.seller_cnpj[:8]
-        if is_unknown_store(note.seller_cnpj, known_stores) and prefix not in warned_stores:
+        if prefix not in warned_stores and not is_registered_store(conn, prefix):
             warned_stores.add(prefix)
             message = (
-                f"loja fora do stores.json: {note.seller_name} (CNPJ {prefix}); "
-                f'adicione "{prefix}": {{"store": "...", "category": "..."}}'
+                f"loja sem cadastro: {note.seller_name} (CNPJ {prefix}); "
+                "cadastre nome e categoria na página /groups do servidor"
             )
             log.warning(message)
             print(f"AVISO  {message}", file=sys.stderr)
