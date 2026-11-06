@@ -20,6 +20,12 @@ Salve a nota como PDF a partir dessa página e coloque o arquivo em `data/`.
   sudo apt install poppler-utils
   ```
 
+- As dependências Python, usadas pelo servidor local:
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+
 ## Como usar
 
 1. Salve os PDFs das notas em `data/`. Subpastas também são lidas.
@@ -41,24 +47,30 @@ então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
 
 ## Ver o gráfico
 
-Depois de importar as notas, gere a página e abra no navegador:
+Inicie o servidor local e abra <http://127.0.0.1:8000/> no navegador:
 
 ```bash
-python3 chart.py
-xdg-open chart.html
+python3 -m pricetrail serve
 ```
+
+A página lê direto do banco: depois de importar notas, basta recarregar. Dá para
+importar com o servidor ligado. O servidor só aceita conexões da sua máquina, porque
+os PDFs contêm seu CPF. Use `--port` para outra porta e `--db` para outro banco.
 
 Filtre por categoria (Mercado, Farmácia…) e, dentro dela, por estabelecimento
 (Atacadão, Farmácia Preço Popular…). Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
 maior preço e a tabela de compras. Também dá para limitar por intervalo de datas,
 ordenar a lista (mais compras, nome, maior alta, maior queda) e ver a variação
-do último preço contra a compra anterior. A página funciona offline. Rode `chart.py` de
-novo sempre que importar notas.
+do último preço contra a compra anterior. A página não depende de internet, só do
+servidor ligado.
 
-As categorias e os nomes dos estabelecimentos vêm de `stores.json`, indexado pelos 8
-primeiros dígitos do CNPJ (iguais em todas as filiais). Para cadastrar uma loja nova,
-adicione uma linha, por exemplo `"12345678": {"store": "Imperatriz", "category": "Mercado"}`.
-Loja fora do arquivo aparece com o nome da nota e a categoria "Outros".
+As categorias e os nomes dos estabelecimentos vêm da tabela `stores`, indexada pelos 8
+primeiros dígitos do CNPJ (iguais em todas as filiais). Ela é carregada de `stores.json`
+na primeira vez que o banco é aberto. Loja sem cadastro aparece com o nome da nota e a
+categoria "Outros".
+
+A mesma mercadoria em duas filiais da mesma rede é um produto só: um produto é a raiz
+do CNPJ, o código e a unidade.
 
 ## O que aparece na saída
 
@@ -153,7 +165,8 @@ Produtos com unidades diferentes não são juntados. Sem `products.json`, tudo f
 
 ## Testes
 
-Sem dependências extras. Os testes usam notas sintéticas (nenhum PDF real):
+Precisam das dependências de `requirements.txt`. Os testes usam notas sintéticas
+(nenhum PDF real):
 
 ```bash
 python3 -m unittest discover -s tests -t .
