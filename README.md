@@ -122,7 +122,19 @@ porque a mesma descrição às vezes cobre tamanhos diferentes. Para revisar:
 python3 suggest_products.py        # mostra candidatos e escreve products.suggested.json
 ```
 
-Copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
+Ou, mais fácil, use a página de agrupamento:
+
+```bash
+python3 group_page.py
+xdg-open group_page/index.html
+```
+
+Nela você marca produtos (ou clica numa sugestão), dá um nome, cria o grupo e
+exporta o `products.json` (Baixar, Copiar ou, no Chrome, Salvar direto). Ela já
+carrega os grupos do `products.json` atual, então dá para renomear, tirar produtos
+e excluir grupos. Substitua o arquivo na pasta do projeto e rode `python3 chart.py`.
+
+Manualmente: copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
 ser tamanhos diferentes) e rode `python3 chart.py`. Cada referência é um código de
 loja (`"75315333:11757"`, 8 dígitos do CNPJ + código) ou uma descrição exata:
 

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agrupar produtos</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Agrupar produtos</h1>
+  <div class="actions">
+    <span id="status" role="status" aria-live="polite"></span>
+    <button id="save" hidden>Salvar products.json</button>
+    <button id="copy">Copiar JSON</button>
+    <button id="download" class="primary">Baixar products.json</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel" aria-labelledby="h-products">
+    <h2 id="h-products">Produtos <small id="count"></small></h2>
+    <div class="filters">
+      <label>Buscar <input id="search" type="search" placeholder="Ex.: detergente" autocomplete="off"></label>
+      <label>Loja <select id="store"></select></label>
+      <label class="check"><input id="ungrouped" type="checkbox" checked> Só sem grupo</label>
+    </div>
+    <ul id="products" class="list"></ul>
+  </section>
+
+  <section class="panel" aria-labelledby="h-draft">
+    <h2 id="h-draft">Novo grupo</h2>
+    <p class="hint" id="draft-hint">Marque produtos na lista ou clique em uma sugestão.</p>
+    <ul id="draft" class="list compact"></ul>
+    <p id="draft-warn" class="warn" hidden></p>
+    <label>Nome do grupo <input id="name" autocomplete="off" placeholder="Ex.: Detergente Ypê"></label>
+    <div class="row">
+      <button id="create" class="primary" disabled>Criar grupo</button>
+      <button id="clear">Limpar seleção</button>
+    </div>
+
+    <h2>Sugestões <small id="sug-count"></small></h2>
+    <p class="hint">Grupos com <span class="tag warn-tag">aviso</span> costumam ser tamanhos diferentes.</p>
+    <ul id="suggestions" class="list"></ul>
+  </section>
+
+  <section class="panel wide" aria-labelledby="h-groups">
+    <h2 id="h-groups">Grupos <small id="group-count"></small></h2>
+    <ul id="groups" class="groups"></ul>
+  </section>
+</main>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

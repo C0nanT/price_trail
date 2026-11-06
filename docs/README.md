@@ -6,5 +6,5 @@
 | [plano-normalizacao-de-produtos.md](plano-normalizacao-de-produtos.md) | **Implementado (manual)**: `suggest_products.py` + `products.json` |
 | [handoff-codigo-de-barras.md](handoff-codigo-de-barras.md) | Pausado |
 
-Já feito fora dos planos: testes do parser (`tests/`), hook `pre-push`, aviso de
+Já feito fora dos planos: página `group_page.py` (`web/`) para montar o `products.json`, testes do parser (`tests/`), hook `pre-push`, aviso de
 loja fora do `stores.json`.
