@@ -105,6 +105,13 @@ class DropRejectedTests(unittest.TestCase):
         out = drop_rejected([base, dict(base)], set())
         self.assertEqual(len(out), 1)
 
+    def test_warnings_recomputed_after_dropping(self):
+        rows = [row("1", "X", prices=[1.0]), row("2", "X", prices=[1.1]), row("3", "X", prices=[9.0])]
+        before = suggest_groups(rows)[0]
+        self.assertTrue(before["warnings"])
+        after = drop_rejected([before], {"75315333:3"})[0]
+        self.assertEqual(after["warnings"], [])
+
     def test_load_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "r.json"

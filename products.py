@@ -92,13 +92,18 @@ def suggest_groups(rows: list[dict]) -> list[dict]:
     return suggestions
 
 
-def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
+def _warnings(members: list[dict]) -> list[str]:
     prices = [price for member in members for price in member["prices"]]
     warnings = []
     if len({member["unit"] for member in members}) > 1:
         warnings.append("unidades diferentes")
     if prices and max(prices) / min(prices) > 1.5:
         warnings.append(f"preços muito diferentes ({min(prices):.2f} a {max(prices):.2f})")
+    return warnings
+
+
+def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
+    warnings = _warnings(members)
     first = min(members, key=lambda m: m["description"])
     return {
         "reason": reason,
@@ -124,7 +129,7 @@ def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
         seen.add(key)
         keep = {ref.split(":", 1)[1] for ref in refs}
         members = [m for m in suggestion["members"] if m["code"] in keep]
-        result.append({**suggestion, "refs": refs, "members": members})
+        result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
     return result
 
 
