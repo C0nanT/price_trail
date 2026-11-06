@@ -9,9 +9,24 @@ import json
 import re
 from pathlib import Path
 
-from pricetrail.catalog import drop_rejected, normalize, suggest_groups  # noqa: F401
+from pricetrail.catalog import _warnings, normalize, suggest_groups  # noqa: F401
 
 CODE_REF_RE = re.compile(r"^(\d{8}):(\S+)$")
+
+
+def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
+    """Comportamento antigo (referência rejeitada sai de todas as sugestões), até group_page.py sair."""
+    result, seen = [], set()
+    for suggestion in suggestions:
+        refs = [ref for ref in suggestion["refs"] if ref not in rejected]
+        key = tuple(refs)
+        if len(refs) < 2 or key in seen:
+            continue
+        seen.add(key)
+        keep = {ref.split(":", 1)[1] for ref in refs}
+        members = [m for m in suggestion["members"] if m["code"] in keep]
+        result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
+    return result
 
 
 class ProductsError(Exception):

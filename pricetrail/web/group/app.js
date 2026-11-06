@@ -10,6 +10,7 @@ const normalize = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase(
 let products = [];
 let suggestions = [];
 let notes = {};
+let rejections = []; // pares [ref, ref] marcados como "não juntar"
 let byRef = new Map();
 
 let groups = {}; // nome -> [referências]
@@ -175,10 +176,41 @@ function renderSuggestions() {
       renderProducts();
       el("name").focus();
     });
-    const head = make("div", { className: "head" }, make("strong", { textContent: s.name }), pick);
+    const reject = make("button", { type: "button", textContent: "Não juntar" });
+    reject.addEventListener("click", () => sendRejections("POST", s.refs));
+    const head = make("div", { className: "head" }, make("strong", { textContent: s.name }), pick, reject);
     const meta = make("div", { className: "meta" }, `${free.length} produtos · ${s.reason} · cód. ${free.map((r) => r.split(":")[1]).join(", ")} `);
     for (const w of s.warnings) meta.append(make("span", { className: "tag warn-tag", textContent: w }), " ");
     return make("li", { className: "sug" }, head, meta);
+  }));
+}
+
+// ---- rejeições ("não juntar") ----
+// Cada chamada devolve o catálogo atualizado; as seleções e os grupos em edição ficam como estão.
+async function sendRejections(method, refs) {
+  try {
+    const response = await fetch("/api/rejections", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(refs),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `a API respondeu ${response.status}`);
+    ({ suggestions, rejections = [] } = data);
+    renderSuggestions();
+    renderRejections();
+  } catch (error) {
+    flash(`Não foi possível salvar a rejeição (${error.message}).`);
+  }
+}
+
+function renderRejections() {
+  el("rej-count").textContent = `${rejections.length}`;
+  el("rejections").replaceChildren(...rejections.map((pair) => {
+    const undo = make("button", { type: "button", textContent: "Desfazer" });
+    undo.addEventListener("click", () => sendRejections("DELETE", pair));
+    const label = pair.map((ref) => `${byRef.get(ref)?.description ?? "?"} (cód. ${ref.split(":")[1]})`).join(" × ");
+    return make("li", { className: "sug" }, make("div", { className: "head" }, make("span", { textContent: label }), undo));
   }));
 }
 
@@ -289,6 +321,7 @@ function showError(error) {
 
 function applyCatalog(data) {
   ({ products, suggestions, notes } = data);
+  rejections = data.rejections ?? [];
   byRef = new Map(products.map((p) => [p.ref, p]));
   groups = structuredClone(data.groups);
   baseKey = JSON.stringify(data.groups);
@@ -300,6 +333,7 @@ function renderAll() {
   renderProducts();
   renderDraft();
   renderSuggestions();
+  renderRejections();
   renderGroups();
 }
 
