@@ -13,7 +13,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from products import suggest_groups
+from products import ProductsError, drop_rejected, load_rejected, suggest_groups
 
 PROJECT_DIR = Path(__file__).resolve().parent
 QUERY = """
@@ -40,7 +40,12 @@ def main() -> int:
         rows.append({**dict(row), "prices": [float(p) for p in row["prices"].split(",")]})
     conn.close()
 
-    suggestions = suggest_groups(rows)
+    try:
+        rejected = load_rejected(PROJECT_DIR / "products.rejected.json")
+    except ProductsError as error:
+        print(f"products.rejected.json: {error}", file=sys.stderr)
+        return 2
+    suggestions = drop_rejected(suggest_groups(rows), rejected)
     output = {}
     for number, s in enumerate(suggestions, start=1):
         flag = f"  !! {'; '.join(s['warnings'])}" if s["warnings"] else ""

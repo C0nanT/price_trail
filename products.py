@@ -107,3 +107,27 @@ def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
         "members": members,
         "warnings": warnings,
     }
+
+
+def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
+    """Tira das sugestões as referências marcadas como "não juntar".
+
+    Sugestão que ficar com menos de 2 produtos some; duplicadas (mesmas
+    referências, ex.: "mesma descrição" e "parecidas") são unificadas.
+    """
+    result, seen = [], set()
+    for suggestion in suggestions:
+        refs = [ref for ref in suggestion["refs"] if ref not in rejected]
+        key = tuple(refs)
+        if len(refs) < 2 or key in seen:
+            continue
+        seen.add(key)
+        keep = {ref.split(":", 1)[1] for ref in refs}
+        members = [m for m in suggestion["members"] if m["code"] in keep]
+        result.append({**suggestion, "refs": refs, "members": members})
+    return result
+
+
+def load_rejected(path: Path) -> set[str]:
+    """Referências de products.rejected.json (mesmo formato do products.json)."""
+    return {ref for refs in load_groups(path).values() for ref in refs}

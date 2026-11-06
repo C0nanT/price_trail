@@ -6,7 +6,7 @@ from pathlib import Path
 
 import chart
 import pricetrail as pt
-from products import ProductsError, Resolver, load_groups, normalize, suggest_groups
+from products import ProductsError, Resolver, drop_rejected, load_groups, load_rejected, normalize, suggest_groups
 from tests.fixtures import make_text
 
 
@@ -79,6 +79,38 @@ class SuggestTests(unittest.TestCase):
     def test_does_not_mix_stores(self):
         out = suggest_groups([row("1", "X"), row("2", "X", cnpj="84683481000100")])
         self.assertEqual(out, [])
+
+
+class DropRejectedTests(unittest.TestCase):
+    def suggestions(self):
+        return suggest_groups([row("1", "X"), row("2", "X"), row("3", "X"), row("4", "Y"), row("5", "Y")])
+
+    def test_whole_group_rejected_disappears(self):
+        out = drop_rejected(self.suggestions(), {"75315333:4", "75315333:5"})
+        self.assertEqual([s["refs"] for s in out], [["75315333:1", "75315333:2", "75315333:3"]])
+
+    def test_single_ref_rejected_keeps_the_rest(self):
+        out = drop_rejected(self.suggestions(), {"75315333:3"})
+        refs = {tuple(s["refs"]) for s in out}
+        self.assertIn(("75315333:1", "75315333:2"), refs)
+        self.assertTrue(all(len(m["code"]) for s in out for m in s["members"]))
+        self.assertEqual([m["code"] for m in out[0]["members"]], ["1", "2"])
+
+    def test_leaving_one_product_drops_suggestion(self):
+        out = drop_rejected(self.suggestions(), {"75315333:1", "75315333:2"})
+        self.assertEqual([s["refs"] for s in out], [["75315333:4", "75315333:5"]])
+
+    def test_duplicate_suggestions_merge(self):
+        base = self.suggestions()[0]
+        out = drop_rejected([base, dict(base)], set())
+        self.assertEqual(len(out), 1)
+
+    def test_load_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "r.json"
+            self.assertEqual(load_rejected(path), set())
+            path.write_text('{"A": ["75315333:1"], "B": ["75315333:2"]}')
+            self.assertEqual(load_rejected(path), {"75315333:1", "75315333:2"})
 
 
 class ChartGroupingTests(unittest.TestCase):

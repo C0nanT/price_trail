@@ -14,7 +14,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from products import ProductsError, load_groups, suggest_groups
+from products import ProductsError, drop_rejected, load_groups, load_rejected, suggest_groups
 
 PROJECT_DIR = Path(__file__).resolve().parent
 WEB_DIR = PROJECT_DIR / "web"
@@ -37,7 +37,7 @@ def load_rows(db_path: Path) -> list[dict]:
     return rows
 
 
-def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict) -> dict:
+def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict, rejected: set[str] = frozenset()) -> dict:
     products = {}
     for row in sorted(rows, key=lambda r: r["last"]):  # a descrição mais recente vence
         ref = f"{row['cnpj'][:8]}:{row['code']}"
@@ -58,7 +58,7 @@ def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict) -> 
     ]
     suggestions = [
         {"name": s["name"], "reason": s["reason"], "refs": s["refs"], "warnings": s["warnings"]}
-        for s in suggest_groups(rows)
+        for s in drop_rejected(suggest_groups(rows), set(rejected))
     ]
     return {"products": listing, "suggestions": suggestions, "groups": groups}
 
@@ -73,13 +73,14 @@ def main() -> int:
         return 2
     try:
         groups = load_groups(PROJECT_DIR / "products.json")
+        rejected = load_rejected(PROJECT_DIR / "products.rejected.json")
     except ProductsError as error:
         print(f"products.json: {error}", file=sys.stderr)
         return 2
     stores_file = PROJECT_DIR / "stores.json"
     stores = json.loads(stores_file.read_text(encoding="utf-8")) if stores_file.is_file() else {}
 
-    data = build_data(load_rows(args.db), groups, stores)
+    data = build_data(load_rows(args.db), groups, stores, rejected)
     args.out.mkdir(exist_ok=True)
     for name in STATIC_FILES:
         shutil.copy(WEB_DIR / name, args.out / name)

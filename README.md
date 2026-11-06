@@ -142,6 +142,9 @@ loja (`"75315333:11757"`, 8 dígitos do CNPJ + código) ou uma descrição exata
 {"Detergente Ypê": ["75315333:11757", "75315333:13453", "75315333:22392"]}
 ```
 
+Produtos que você já decidiu que são diferentes ficam em `products.rejected.json`
+(mesmo formato) e deixam de aparecer nas sugestões.
+
 Produtos com unidades diferentes não são juntados. Sem `products.json`, tudo fica como antes.
 
 ## Testes
