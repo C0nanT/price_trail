@@ -54,7 +54,24 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
 
     @app.get("/api/catalog")
     def catalog_data():
-        return jsonify(catalog.build_catalog(db(), data_dir, catalog.load_rejected_refs(legacy_dir)))
+        return jsonify(catalog.build_catalog(db(), data_dir))
+
+    def change_rejections(change):
+        if not request.is_json:
+            abort(415)
+        try:
+            change(db(), request.get_json(silent=True))
+        except catalog.RejectionError as error:
+            return jsonify(error=str(error)), 422
+        return jsonify(catalog.build_catalog(db(), data_dir))
+
+    @app.post("/api/rejections")
+    def reject():
+        return change_rejections(catalog.reject_pairs)
+
+    @app.delete("/api/rejections")
+    def undo_rejection():
+        return change_rejections(catalog.undo_rejected_pairs)
 
     @app.get("/api/stores")
     def stores():

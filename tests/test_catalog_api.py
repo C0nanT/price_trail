@@ -22,6 +22,7 @@ class CatalogTests(ApiTestCase):
                 "store": "Atacadão", "purchases": 1, "min": 5.0, "max": 5.0,
             }],
             "suggestions": [],
+            "rejections": [],
             "groups": {"Detergente": [REF]},
             "notes": {REF: [{
                 "date": "2026-10-02", "number": 7, "file": "a.pdf", "href": note_url(7),
@@ -73,17 +74,8 @@ class CatalogTests(ApiTestCase):
         self.assertEqual(self.catalog()["suggestions"][0]["warnings"],
                          ["unidades diferentes", "preços muito diferentes (2.00 a 4.00)"])
 
-    def test_rejeicoes_ainda_vem_do_json_lido_a_cada_request(self):
-        self.add_note(item("1", "DET YPE"), item("2", "DET YPE"), item("3", "DET YPE"))
-        client = self.client()
-        self.write_legacy("products.rejected.json", {"x": ["75315333:3"]})
-        self.assertEqual(client.get("/api/catalog").get_json()["suggestions"][0]["refs"],
-                         ["75315333:1", "75315333:2"])
-        self.write_legacy("products.rejected.json", {"x": ["75315333:2", "75315333:3"]})
-        self.assertEqual(client.get("/api/catalog").get_json()["suggestions"], [])
-
     def test_banco_vazio(self):
-        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}})
+        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": []})
 
     def test_recusa_outro_host(self):
         response = self.client().get("/api/catalog", headers={"Host": "evil.example"})

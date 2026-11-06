@@ -4,6 +4,7 @@ O schema evolui por migrações numeradas, controladas por PRAGMA user_version. 
 versão 0 é um banco inexistente ou o banco de antes das migrações, que já tem
 notes, items e a view.
 """
+import itertools
 import json
 import re
 import sqlite3
@@ -190,8 +191,52 @@ def migration_2(conn: sqlite3.Connection, data_dir: Path | None, _legacy_dir: Pa
     backfill_source_paths(conn, data_dir)
 
 
+def canonical_pair(ref_a: tuple[str, str], ref_b: tuple[str, str]) -> tuple[str, str, str, str]:
+    """(raiz, código) de cada ponta, na ordem em que o par é guardado: a < b."""
+    first, second = sorted((ref_a, ref_b))
+    return (*first, *second)
+
+
+def load_legacy_rejections(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
+    """Cada grupo de products.rejected.json vira todos os pares entre suas referências."""
+    for name, refs in read_legacy_json(legacy_dir, "products.rejected.json").items():
+        if not isinstance(refs, list):
+            raise MigrationError(
+                f'products.rejected.json deve ser {{"Nome": ["raiz:código", ...]}}, veja o grupo {name!r}'
+            )
+        parsed = []
+        for ref in dict.fromkeys(refs):
+            match = CODE_REF_RE.match(ref) if isinstance(ref, str) else None
+            if not match:
+                raise MigrationError(
+                    f"products.rejected.json: {ref!r} no grupo {name!r} não é uma referência raiz:código"
+                )
+            parsed.append((match[1], match[2]))
+        conn.executemany(
+            "INSERT OR IGNORE INTO rejected_pairs (cnpj_root_a, code_a, cnpj_root_b, code_b) VALUES (?, ?, ?, ?)",
+            [canonical_pair(a, b) for a, b in itertools.combinations(parsed, 2)],
+        )
+
+
+def migration_3(conn: sqlite3.Connection, _data_dir: Path | None, legacy_dir: Path | None) -> None:
+    """Pares de produtos que não devem ser juntados, e a carga de products.rejected.json."""
+    conn.execute(
+        """
+CREATE TABLE rejected_pairs (
+    cnpj_root_a TEXT NOT NULL,
+    code_a      TEXT NOT NULL,
+    cnpj_root_b TEXT NOT NULL,
+    code_b      TEXT NOT NULL,
+    PRIMARY KEY (cnpj_root_a, code_a, cnpj_root_b, code_b),
+    CHECK (cnpj_root_a < cnpj_root_b OR (cnpj_root_a = cnpj_root_b AND code_a < code_b))  -- ordem canônica
+)
+"""
+    )
+    load_legacy_rejections(conn, legacy_dir)
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2)
+MIGRATIONS = (migration_1, migration_2, migration_3)
 
 
 def user_version(conn: sqlite3.Connection) -> int:

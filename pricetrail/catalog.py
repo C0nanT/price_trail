@@ -1,12 +1,13 @@
 """Consultas e regras de produtos, grupos, sugestões e notas."""
 import difflib
+import itertools
 import re
 import sqlite3
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from .db import CODE_REF_RE, read_legacy_json
+from .db import CODE_REF_RE, canonical_pair
 from .pdfs import resolve_in_data
 
 SIMILAR_RATIO = 0.88
@@ -142,15 +143,28 @@ def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
     }
 
 
-def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
-    """Tira das sugestões as referências marcadas como "não juntar".
+def split_ref(ref: str) -> tuple[str, str]:
+    root, code = ref.split(":", 1)
+    return root, code
 
+
+def is_rejected(rejected: set[tuple], ref_a: str, ref_b: str) -> bool:
+    return canonical_pair(split_ref(ref_a), split_ref(ref_b)) in rejected
+
+
+def drop_rejected(suggestions: list[dict], rejected: set[tuple]) -> list[dict]:
+    """Aplica os pares marcados como "não juntar".
+
+    Um produto só sai da sugestão se todos os seus pares nela estiverem rejeitados.
     Sugestão que ficar com menos de 2 produtos some; duplicadas (mesmas
     referências, ex.: "mesma descrição" e "parecidas") são unificadas.
     """
     result, seen = [], set()
     for suggestion in suggestions:
-        refs = [ref for ref in suggestion["refs"] if ref not in rejected]
+        refs = [
+            ref for ref in suggestion["refs"]
+            if any(other != ref and not is_rejected(rejected, ref, other) for other in suggestion["refs"])
+        ]
         key = tuple(refs)
         if len(refs) < 2 or key in seen:
             continue
@@ -226,7 +240,7 @@ def list_ref_products(rows: list[dict]) -> list[dict]:
     ]
 
 
-def list_suggestions(rows: list[dict], rejected: set[str]) -> list[dict]:
+def list_suggestions(rows: list[dict], rejected: set[tuple]) -> list[dict]:
     return [
         {"name": s["name"], "reason": s["reason"], "refs": s["refs"], "warnings": s["warnings"]}
         for s in drop_rejected(suggest_groups(rows), rejected)
@@ -348,20 +362,62 @@ def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dic
     return row
 
 
-def load_rejected_refs(legacy_dir: Path | None) -> set[str]:
-    """Referências de products.rejected.json, até a rejeição ir para o banco."""
-    return {ref for refs in read_legacy_json(legacy_dir, "products.rejected.json").values() for ref in refs}
+def load_rejected_pairs(conn: sqlite3.Connection) -> set[tuple]:
+    return {tuple(row) for row in conn.execute("SELECT * FROM rejected_pairs")}
 
 
-def build_catalog(conn: sqlite3.Connection, data_dir: Path, rejected: set[str]) -> dict:
+def list_rejections(rejected: set[tuple]) -> list[list[str]]:
+    """Os pares como [ref, ref], em ordem estável."""
+    return [[f"{a}:{b}", f"{c}:{d}"] for a, b, c, d in sorted(rejected)]
+
+
+def build_catalog(conn: sqlite3.Connection, data_dir: Path) -> dict:
     """Os dados da página de agrupamento."""
     rows = load_product_rows(conn)
+    rejected = load_rejected_pairs(conn)
     return {
         "products": list_ref_products(rows),
         "suggestions": list_suggestions(rows, rejected),
         "groups": list_groups(conn),
         "notes": list_notes(conn, data_dir),
+        "rejections": list_rejections(rejected),
     }
+
+
+class RejectionError(ValueError):
+    """A lista de referências não serve para rejeitar pares."""
+
+
+def _pairs_between(refs) -> list[tuple]:
+    if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
+        raise RejectionError("envie uma lista de referências no formato raiz:código")
+    for ref in refs:
+        if not CODE_REF_RE.match(ref):
+            raise RejectionError(f"{ref!r} não é uma referência raiz:código")
+    unique = [split_ref(ref) for ref in dict.fromkeys(refs)]
+    if len(unique) < 2:
+        raise RejectionError("informe ao menos duas referências diferentes")
+    return [canonical_pair(a, b) for a, b in itertools.combinations(unique, 2)]
+
+
+def reject_pairs(conn: sqlite3.Connection, refs) -> None:
+    """Rejeita todos os pares entre as referências."""
+    pairs = _pairs_between(refs)
+    with conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO rejected_pairs (cnpj_root_a, code_a, cnpj_root_b, code_b) VALUES (?, ?, ?, ?)",
+            pairs,
+        )
+
+
+def undo_rejected_pairs(conn: sqlite3.Connection, refs) -> None:
+    """Desfaz a rejeição de todos os pares entre as referências."""
+    pairs = _pairs_between(refs)
+    with conn:
+        conn.executemany(
+            "DELETE FROM rejected_pairs WHERE cnpj_root_a = ? AND code_a = ? AND cnpj_root_b = ? AND code_b = ?",
+            pairs,
+        )
 
 
 def find_note_pdf(conn: sqlite3.Connection, data_dir: Path, access_key: str) -> Path | None:
