@@ -1,6 +1,7 @@
 """Consultas e regras de produtos, grupos, sugestões e notas."""
 import difflib
 import itertools
+import json
 import re
 import sqlite3
 import unicodedata
@@ -278,13 +279,18 @@ def replace_groups(conn: sqlite3.Connection, pairs: list[tuple[str, object]]) ->
     """Troca todos os grupos numa transação: se algo falhar, nada muda."""
     groups = validate_groups(pairs)
     with conn:
-        conn.execute("DELETE FROM product_groups")  # group_refs sai junto, por cascata
-        for name, refs in groups:
-            group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
-            conn.executemany(
-                "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
-                [(group_id, *ref.split(":", 1)) for ref in refs],
-            )
+        _write_groups(conn, groups)
+
+
+def _write_groups(conn: sqlite3.Connection, groups: list[tuple[str, list[str]]]) -> None:
+    """Troca os grupos sem fechar a transação, para quem precisa de mais escritas junto."""
+    conn.execute("DELETE FROM product_groups")  # group_refs sai junto, por cascata
+    for name, refs in groups:
+        group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
+        conn.executemany(
+            "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
+            [(group_id, *ref.split(":", 1)) for ref in refs],
+        )
 
 
 def list_groups(conn: sqlite3.Connection) -> dict[str, list[str]]:
@@ -423,3 +429,94 @@ def undo_rejected_pairs(conn: sqlite3.Connection, refs) -> None:
 def find_note_pdf(conn: sqlite3.Connection, data_dir: Path, access_key: str) -> Path | None:
     row = conn.execute("SELECT source_path FROM notes WHERE access_key = ?", (access_key,)).fetchone()
     return resolve_in_data(row["source_path"], data_dir) if row else None
+
+
+EXPORT_FORMAT_VERSION = 1
+
+
+class CurationFileError(ValueError):
+    """O arquivo de curadoria é inválido ou de um formato desconhecido."""
+
+
+def export_curation(conn: sqlite3.Connection) -> str:
+    """Grupos, pares rejeitados e lojas como JSON de ordem estável, para commitar."""
+    groups = {name: sorted(refs) for name, refs in list_groups(conn).items()}
+    data = {
+        "format_version": EXPORT_FORMAT_VERSION,
+        "groups": groups,
+        "rejected_pairs": list_rejections(load_rejected_pairs(conn)),
+        "stores": {
+            row["cnpj_root"]: {"store": row["store"], "category": row["category"]}
+            for row in conn.execute(STORES_QUERY)
+        },
+    }
+    return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _parse_curation(text: str) -> tuple[list, list, list]:
+    """Valida o arquivo inteiro e devolve (grupos, pares, lojas) prontos para gravar."""
+    try:
+        data = json.loads(text)
+    except ValueError as error:
+        raise CurationFileError(f"não é um JSON válido: {error}") from error
+    if not isinstance(data, dict):
+        raise CurationFileError("o arquivo deve ser um objeto JSON")
+    if data.get("format_version") != EXPORT_FORMAT_VERSION:
+        raise CurationFileError(
+            f"formato desconhecido: format_version={data.get('format_version')!r}, "
+            f"esta versão lê {EXPORT_FORMAT_VERSION}"
+        )
+    for key in ("groups", "rejected_pairs", "stores"):
+        if key not in data:
+            raise CurationFileError(f"falta o campo {key!r}")
+    if not isinstance(data["groups"], dict):
+        raise CurationFileError('"groups" deve ser {"Nome": ["raiz:código", ...]}')
+    try:
+        groups = validate_groups(list(data["groups"].items()))
+    except GroupsError as error:
+        raise CurationFileError(f"grupos: {error}") from error
+
+    pairs = []
+    if not isinstance(data["rejected_pairs"], list):
+        raise CurationFileError('"rejected_pairs" deve ser uma lista de [ref, ref]')
+    for pair in data["rejected_pairs"]:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(r, str) for r in pair)):
+            raise CurationFileError(f"par rejeitado inválido: {pair!r}")
+        for ref in pair:
+            if not CODE_REF_RE.match(ref):
+                raise CurationFileError(f"{ref!r} não é uma referência raiz:código")
+        if pair[0] == pair[1]:
+            raise CurationFileError(f"par rejeitado com a mesma referência duas vezes: {pair[0]!r}")
+        pairs.append(canonical_pair(split_ref(pair[0]), split_ref(pair[1])))
+
+    if not isinstance(data["stores"], dict):
+        raise CurationFileError('"stores" deve ser {"raiz": {"store": ..., "category": ...}}')
+    stores = []
+    for root, entry in data["stores"].items():
+        if not (len(root) == 8 and root.isascii() and root.isdigit()):
+            raise CurationFileError(f"raiz de CNPJ inválida em stores: {root!r}")
+        if not isinstance(entry, dict):
+            raise CurationFileError(f"a loja {root} deve ser um objeto com store e category")
+        store, category = entry.get("store"), entry.get("category")
+        if not all(v is None or isinstance(v, str) for v in (store, category)):
+            raise CurationFileError(f"nome e categoria da loja {root} devem ser texto")
+        stores.append((root, store, category))
+    return groups, sorted(set(pairs)), stores
+
+
+def restore_curation(conn: sqlite3.Connection, text: str) -> None:
+    """Troca grupos, pares rejeitados e lojas pelo conteúdo do arquivo, numa transação só.
+
+    O arquivo é validado inteiro antes de tocar no banco. Referências a produtos sem
+    nota são aceitas: a curadoria não depende de a nota já estar importada.
+    """
+    groups, pairs, stores = _parse_curation(text)
+    with conn:
+        _write_groups(conn, groups)
+        conn.execute("DELETE FROM rejected_pairs")
+        conn.executemany(
+            "INSERT INTO rejected_pairs (cnpj_root_a, code_a, cnpj_root_b, code_b) VALUES (?, ?, ?, ?)",
+            pairs,
+        )
+        conn.execute("DELETE FROM stores")
+        conn.executemany("INSERT INTO stores (cnpj_root, store, category) VALUES (?, ?, ?)", stores)
