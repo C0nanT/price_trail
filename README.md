@@ -50,7 +50,9 @@ xdg-open chart.html
 
 Filtre por categoria (Mercado, Farmácia…) e, dentro dela, por estabelecimento
 (Atacadão, Farmácia Preço Popular…). Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
-maior preço e a tabela de compras. A página funciona offline. Rode `chart.py` de
+maior preço e a tabela de compras. Também dá para limitar por intervalo de datas,
+ordenar a lista (mais compras, nome, maior alta, maior queda) e ver a variação
+do último preço contra a compra anterior. A página funciona offline. Rode `chart.py` de
 novo sempre que importar notas.
 
 As categorias e os nomes dos estabelecimentos vêm de `stores.json`, indexado pelos 8
@@ -134,5 +136,5 @@ Lojas fora do `stores.json` geram um aviso no terminal e no log durante a import
 ## Planejado
 
 - [Normalização de produtos](docs/plano-normalizacao-de-produtos.md)
-- [Filtros e destaques no gráfico](docs/plano-filtros-do-grafico.md)
+- [Filtros e destaques no gráfico](docs/plano-filtros-do-grafico.md) (feito)
 - [Busca por código de barras](docs/handoff-codigo-de-barras.md)

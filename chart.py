@@ -40,6 +40,8 @@ TEMPLATE = r"""<!doctype html>
   --text-secondary: #52514e;
   --hairline: #e4e3df;
   --series: #2a78d6;
+  --up: #b3261e;
+  --down: #1b7a3a;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -49,6 +51,8 @@ TEMPLATE = r"""<!doctype html>
     --text-secondary: #c3c2b7;
     --hairline: #343432;
     --series: #3987e5;
+    --up: #f2796f;
+    --down: #5cc47a;
   }
 }
 * { box-sizing: border-box; }
@@ -75,7 +79,12 @@ input, select {
   color: var(--text-primary);
   font: inherit;
 }
-.subtitle { margin: 2px 0 20px; color: var(--text-secondary); font-size: 14px; }
+.variation { margin: 0 0 16px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.variation.up { color: var(--up); }
+.variation.down { color: var(--down); }
+.variation.flat { color: var(--text-secondary); }
+.variation small { font-weight: 400; color: var(--text-secondary); }
+.subtitle { margin: 2px 0 8px; color: var(--text-secondary); font-size: 14px; }
 .check { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; margin: 0 0 20px; }
 .check label { display: grid; gap: 4px; flex: 0 1 200px; font-size: 13px; color: var(--text-secondary); }
 .check .average { color: var(--text-secondary); font-size: 14px; }
@@ -125,10 +134,21 @@ th:last-child, td:last-child { padding-right: 0; }
     <label>Estabelecimento <select id="store"></select></label>
     <label>Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off"></label>
     <label>Produto <select id="product"></select></label>
+    <label>De <input id="from" type="date"></label>
+    <label>Até <input id="to" type="date"></label>
+    <label>Ordenar por
+      <select id="sort">
+        <option value="purchases">Mais compras</option>
+        <option value="name">Nome</option>
+        <option value="rise">Maior alta</option>
+        <option value="drop">Maior queda</option>
+      </select>
+    </label>
   </div>
   <section id="details">
     <h2 id="title"></h2>
     <p class="subtitle" id="subtitle"></p>
+    <p class="variation" id="variation"></p>
     <div class="check">
       <div class="average">Média dos preços <strong id="average"></strong></div>
       <label>Preço atual (R$) <input id="current" inputmode="decimal" placeholder="Ex.: 7,99" autocomplete="off"></label>
@@ -148,7 +168,7 @@ th:last-child, td:last-child { padding-right: 0; }
     </div>
     <p class="note">Preços como impressos na nota. Descontos no total da compra não estão incluídos.</p>
   </section>
-  <p id="empty" hidden>Nenhum produto encontrado.</p>
+  <p id="empty" hidden>Nenhum produto encontrado com esses filtros.</p>
 </main>
 <script id="data" type="application/json">__DATA__</script>
 <script>
@@ -161,6 +181,9 @@ const search = el("search");
 const select = el("product");
 const categorySelect = el("category");
 const storeSelect = el("store");
+const fromInput = el("from");
+const toInput = el("to");
+const sortSelect = el("sort");
 const ALL = "";
 const chart = el("chart");
 const tooltip = el("tooltip");
@@ -208,19 +231,61 @@ function fillStores() {
   fillSelect(storeSelect, [...new Set(inCategory.map((p) => p.store))].sort(), "Todos");
 }
 
+function dateBound(input, endOfDay) {
+  if (!input.value) return null;
+  const date = new Date(`${input.value}T${endOfDay ? "23:59:59.999" : "00:00:00"}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// Compras do produto dentro do intervalo de datas escolhido.
+function purchasesIn(product) {
+  const from = dateBound(fromInput, false);
+  const to = dateBound(toInput, true);
+  return product.purchases.filter((p) => (!from || p.date >= from) && (!to || p.date <= to));
+}
+
+// Variação do último preço contra o anterior; null com menos de duas compras.
+function variationOf(purchases) {
+  if (purchases.length < 2) return null;
+  const last = purchases[purchases.length - 1];
+  const previous = purchases[purchases.length - 2];
+  return { change: last.price / previous.price - 1, previous };
+}
+
+function sortMatches(entries) {
+  const mode = sortSelect.value;
+  if (mode === "name") {
+    entries.sort((a, b) => a.product.description.localeCompare(b.product.description, "pt-BR"));
+  } else if (mode === "rise" || mode === "drop") {
+    const sign = mode === "rise" ? -1 : 1;
+    // Produtos com uma só compra (sem variação) vão para o fim.
+    entries.sort((a, b) => {
+      if (a.variation === null || b.variation === null) {
+        return (a.variation === null) - (b.variation === null);
+      }
+      return sign * (a.variation.change - b.variation.change);
+    });
+  }
+  // "purchases": mantém a ordem vinda do Python (mais compras primeiro).
+  return entries;
+}
+
 function fillOptions() {
   const terms = normalize(search.value).split(/\s+/).filter(Boolean);
-  const matches = products.filter((product) => {
-    if (categorySelect.value && product.category !== categorySelect.value) return false;
-    if (storeSelect.value && product.store !== storeSelect.value) return false;
+  const entries = [];
+  products.forEach((product, index) => {
+    if (categorySelect.value && product.category !== categorySelect.value) return;
+    if (storeSelect.value && product.store !== storeSelect.value) return;
     const haystack = normalize(`${product.description} ${product.code} ${product.seller}`);
-    return terms.every((term) => haystack.includes(term));
+    if (!terms.every((term) => haystack.includes(term))) return;
+    const purchases = purchasesIn(product);
+    if (!purchases.length) return;
+    entries.push({ product, index, count: purchases.length, variation: variationOf(purchases) });
   });
   const previous = select.value;
-  select.replaceChildren(...matches.map((product) => {
-    const count = product.purchases.length;
+  select.replaceChildren(...sortMatches(entries).map(({ product, index, count }) => {
     const label = `${product.description} (${product.code}) · ${count} ${count === 1 ? "compra" : "compras"}`;
-    return new Option(label, products.indexOf(product));
+    return new Option(label, index);
   }));
   if ([...select.options].some((option) => option.value === previous)) select.value = previous;
   render();
@@ -404,11 +469,35 @@ function renderChart(product) {
   svg.addEventListener("pointerleave", () => hideTooltip(plot));
 }
 
+function renderVariation(purchases) {
+  const node = el("variation");
+  const variation = variationOf(purchases);
+  node.className = "variation";
+  if (!variation) {
+    node.textContent = "";
+    return;
+  }
+  const { change, previous } = variation;
+  const kind = Math.abs(change) < 0.0005 ? "flat" : change > 0 ? "up" : "down";
+  const arrow = { up: "▲", down: "▼", flat: "＝" }[kind];
+  const text = kind === "flat" ? "Preço igual" : percentFormat.format(change);
+  node.classList.add(kind);
+  node.replaceChildren(
+    `${arrow} ${text} `,
+    Object.assign(document.createElement("small"), {
+      textContent: `vs compra anterior (${moneyFormat.format(previous.price)} em ${dateFormat.format(previous.date)})`,
+    }),
+  );
+}
+
 function render() {
-  const product = products[select.value];
-  el("details").hidden = !product;
-  el("empty").hidden = Boolean(product);
-  if (!product) return;
+  const original = products[select.value];
+  el("details").hidden = !original;
+  el("empty").hidden = Boolean(original);
+  if (!original) return;
+  // Todo o resto da página enxerga só as compras dentro do intervalo de datas.
+  const product = { ...original, purchases: purchasesIn(original) };
+  renderVariation(product.purchases);
   el("title").textContent = product.description;
   el("subtitle").textContent = `${product.seller} · código ${product.code} · preço por ${product.unit}, em R$`;
   renderCheck(product);
@@ -423,6 +512,7 @@ for (const product of products) {
 search.addEventListener("input", fillOptions);
 categorySelect.addEventListener("change", () => { fillStores(); fillOptions(); });
 storeSelect.addEventListener("change", fillOptions);
+for (const input of [fromInput, toInput, sortSelect]) input.addEventListener("change", fillOptions);
 select.addEventListener("change", render);
 el("current").addEventListener("input", render);
 new ResizeObserver(render).observe(chart);
