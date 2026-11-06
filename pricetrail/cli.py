@@ -26,7 +26,6 @@ def main(argv: list[str] | None = None) -> int:
     importar.add_argument("folder", nargs="?", type=Path, help="pasta a ler (padrão: a pasta de dados)")
     importar.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
     importar.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
-    importar.add_argument("--stores", type=Path, default=PROJECT_DIR / "stores.json")
     importar.add_argument("--log", type=Path, default=PROJECT_DIR / "pricetrail.log")
 
     servir = commands.add_parser("serve", help="abre o gráfico e o agrupamento em um servidor local")
@@ -37,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "import":
-            return import_folder(args.folder or args.data, args.db, args.stores, args.log, args.data, PROJECT_DIR)
+            return import_folder(args.folder or args.data, args.db, args.log, args.data, PROJECT_DIR)
         if args.command == "serve":
             return serve(args.db, args.data, args.port)
     except MigrationError as error:

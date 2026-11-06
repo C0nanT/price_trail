@@ -51,6 +51,20 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
     def catalog_data():
         return jsonify(catalog.build_catalog(db(), data_dir, catalog.load_rejected_refs(legacy_dir)))
 
+    @app.get("/api/stores")
+    def stores():
+        return jsonify(catalog.list_stores(db()))
+
+    @app.put("/api/stores/<cnpj_root>")
+    def put_store(cnpj_root: str):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
+        try:
+            return jsonify(catalog.save_store(db(), cnpj_root, body.get("store"), body.get("category")))
+        except catalog.StoreError as error:
+            return jsonify(error=str(error)), 422
+
     @app.get("/notes/<access_key>.pdf")
     def note_pdf(access_key: str):
         pdf = catalog.find_note_pdf(db(), data_dir, access_key) if ACCESS_KEY_RE.fullmatch(access_key) else None
