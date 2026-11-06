@@ -9,6 +9,9 @@ import re
 import sqlite3
 from pathlib import Path
 
+from .nfce import ACCESS_KEY_RE, NoteError
+from .pdfs import extract_text, find_pdfs, path_in_data
+
 BASE_STATEMENTS = (
     """
 CREATE TABLE IF NOT EXISTS notes (
@@ -137,7 +140,7 @@ def load_legacy_groups(conn: sqlite3.Connection, legacy_dir: Path | None) -> Non
                 raise MigrationError(f"products.json: {ref!r} está em mais de um grupo") from error
 
 
-def migration_1(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
+def migration_1(conn: sqlite3.Connection, _data_dir: Path | None, legacy_dir: Path | None) -> None:
     """Schema base, curadoria no banco e carga inicial dos JSONs."""
     for statement in BASE_STATEMENTS + CURATION_STATEMENTS:
         conn.execute(statement)
@@ -145,15 +148,57 @@ def migration_1(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     load_legacy_groups(conn, legacy_dir)
 
 
+def index_pdfs(data_dir: Path) -> tuple[dict[str, Path], dict[str, Path]]:
+    """PDFs por chave de acesso e, só para os sem chave legível, por nome do arquivo.
+
+    Um PDF com chave é de outra nota mesmo que o nome coincida com o source_file.
+    """
+    by_key: dict[str, Path] = {}
+    by_name: dict[str, Path] = {}
+    for pdf in find_pdfs(data_dir):
+        try:
+            match = ACCESS_KEY_RE.search(extract_text(pdf))
+        except (NoteError, OSError):
+            match = None
+        if match:
+            by_key.setdefault("".join(match[1].split()), pdf)
+        else:
+            by_name.setdefault(pdf.name, pdf)
+    return by_key, by_name
+
+
+def backfill_source_paths(conn: sqlite3.Connection, data_dir: Path | None) -> None:
+    notes = conn.execute("SELECT access_key, source_file FROM notes").fetchall()
+    if not notes:
+        return
+    # Esta carga roda uma vez só: sem a pasta, as notas perderiam o link sem aviso.
+    if data_dir is None or not data_dir.is_dir():
+        raise MigrationError(f"pasta de dados não encontrada ({data_dir}), indique onde estão os PDFs com --data")
+    by_key, by_name = index_pdfs(data_dir)
+    for key, source_file in notes:
+        pdf = by_key.get(key) or by_name.get(source_file)
+        if pdf:
+            conn.execute(
+                "UPDATE notes SET source_path = ? WHERE access_key = ?",
+                (path_in_data(pdf, data_dir), key),
+            )
+
+
+def migration_2(conn: sqlite3.Connection, data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Caminho do PDF de cada nota, relativo à pasta de dados."""
+    conn.execute("ALTER TABLE notes ADD COLUMN source_path TEXT")
+    backfill_source_paths(conn, data_dir)
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1,)
+MIGRATIONS = (migration_1, migration_2)
 
 
 def user_version(conn: sqlite3.Connection) -> int:
     return conn.execute("PRAGMA user_version").fetchone()[0]
 
 
-def migrate(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
+def migrate(conn: sqlite3.Connection, data_dir: Path | None, legacy_dir: Path | None) -> None:
     """Aplica as migrações pendentes numa transação só: ou todas, ou nenhuma."""
     if user_version(conn) >= len(MIGRATIONS):
         return
@@ -164,21 +209,22 @@ def migrate(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     with conn:
         # Outro processo pode ter migrado enquanto este esperava o BEGIN.
         for version in range(user_version(conn) + 1, len(MIGRATIONS) + 1):
-            MIGRATIONS[version - 1](conn, legacy_dir)
+            MIGRATIONS[version - 1](conn, data_dir, legacy_dir)
             conn.execute(f"PRAGMA user_version = {version}")
 
 
-def connect(path: Path, legacy_dir: Path | None = None) -> sqlite3.Connection:
+def connect(path: Path, data_dir: Path | None = None, legacy_dir: Path | None = None) -> sqlite3.Connection:
     """Abre o banco, liga as chaves estrangeiras e aplica as migrações pendentes.
 
-    legacy_dir é a pasta dos JSONs da curadoria antiga, lidos só pela migração
-    que os carrega. O banco já migrado não lê essa pasta nem escreve nada aqui.
+    data_dir é a pasta dos PDFs e legacy_dir a dos JSONs da curadoria antiga. As
+    duas só são lidas pelas migrações que fazem a carga inicial: o banco já migrado
+    não as usa. Migrar um banco com notas sem data_dir levanta MigrationError.
     """
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     try:
-        migrate(conn, legacy_dir)
+        migrate(conn, data_dir, legacy_dir)
     except BaseException:
         conn.close()
         raise

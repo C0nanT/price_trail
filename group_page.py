@@ -5,7 +5,8 @@ Uso: python3 group_page.py [--db ARQUIVO] [--out PASTA]
 
 A página lê o banco e o products.json atuais, deixa você montar os grupos e
 exporta um products.json novo (baixar, copiar ou salvar direto no Chrome).
-Rode de novo depois de importar notas.
+Rode de novo depois de importar notas. É a versão em arquivo da página de
+pricetrail/web/group, que o servidor entrega com dados atuais em /groups.
 """
 import argparse
 import json
@@ -16,13 +17,12 @@ import sys
 from pathlib import Path
 from urllib.parse import quote
 
-from pricetrail.importer import extract_text, find_pdfs
+from pricetrail.pdfs import extract_text, find_pdfs
 from pricetrail.nfce import ACCESS_KEY_RE, NoteError
 from products import ProductsError, drop_rejected, load_groups, load_rejected, suggest_groups
 
 PROJECT_DIR = Path(__file__).resolve().parent
-WEB_DIR = PROJECT_DIR / "web"
-STATIC_FILES = ["index.html", "style.css", "app.js"]
+WEB_DIR = PROJECT_DIR / "pricetrail" / "web" / "group"
 
 QUERY = """
 SELECT seller_cnpj AS cnpj, seller_name, product_code AS code, description, unit,
@@ -110,6 +110,13 @@ def build_data(rows: list[dict], groups: dict[str, list[str]], stores: dict, rej
     return {"notes": notes or {}, "products": listing, "suggestions": suggestions, "groups": groups}
 
 
+def static_page() -> str:
+    """A página do servidor, adaptada para abrir como arquivo, com os dados em data.js."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace('<a href="/">', '<a href="../chart.html">').replace("/static/group/", "")
+    return html.replace('<script src="app.js">', '<script src="data.js"></script>\n<script src="app.js">')
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Gera a página de agrupamento de produtos.")
     parser.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
@@ -131,8 +138,9 @@ def main() -> int:
     args.out.mkdir(exist_ok=True)
     notes = load_notes(args.db, args.data, args.out)
     data = build_data(load_rows(args.db), groups, stores, rejected, notes)
-    for name in STATIC_FILES:
+    for name in ("style.css", "app.js"):
         shutil.copy(WEB_DIR / name, args.out / name)
+    (args.out / "index.html").write_text(static_page(), encoding="utf-8")
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     (args.out / "data.js").write_text(f"window.DATA = {payload};\n", encoding="utf-8")
     print(f"{len(data['products'])} produtos, {len(data['suggestions'])} sugestões em {args.out}/index.html")

@@ -1,5 +1,15 @@
-"""Consultas e regras de produtos."""
+"""Consultas e regras de produtos, grupos, sugestões e notas."""
+import difflib
+import re
 import sqlite3
+import unicodedata
+from collections import defaultdict
+from pathlib import Path
+
+from .db import read_legacy_json
+from .pdfs import resolve_in_data
+
+SIMILAR_RATIO = 0.88
 
 # Linhas repetidas de um produto na mesma nota e com o mesmo preço viram uma compra.
 PURCHASES_QUERY = """
@@ -63,3 +73,210 @@ def list_products(conn: sqlite3.Connection) -> list[dict]:
         products.values(),
         key=lambda product: (-len(product["purchases"]), product["description"]),
     )
+
+
+def normalize(text: str) -> str:
+    text = unicodedata.normalize("NFD", text).upper()
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return " ".join(re.sub(r"[^A-Z0-9]+", " ", text).split())
+
+
+def similar(a: str, b: str) -> bool:
+    """ratio() é lento e roda a cada request; os dois primeiros são limites superiores dele."""
+    matcher = difflib.SequenceMatcher(None, a, b)
+    return (
+        matcher.real_quick_ratio() > SIMILAR_RATIO
+        and matcher.quick_ratio() > SIMILAR_RATIO
+        and matcher.ratio() > SIMILAR_RATIO
+    )
+
+
+def suggest_groups(rows: list[dict]) -> list[dict]:
+    """Candidatos a agrupamento, para revisão humana. Nada é aplicado.
+
+    rows: um dict por (cnpj, código, unidade) com cnpj, code, description, unit,
+    prices (lista), purchases (int). Sugere, na mesma loja: mesma descrição com
+    códigos diferentes, e descrições quase iguais.
+    """
+    by_store = defaultdict(list)
+    for row in rows:
+        by_store[row["cnpj"][:8]].append(row)
+
+    suggestions = []
+    for store, items in by_store.items():
+        by_description = defaultdict(list)
+        for item in items:
+            by_description[normalize(item["description"])].append(item)
+        for description, members in sorted(by_description.items()):
+            if len(members) > 1:
+                suggestions.append(_suggestion("mesma descrição", store, members))
+        names = sorted(by_description)
+        for index, a in enumerate(names):
+            for b in names[index + 1 :]:
+                if similar(a, b):
+                    suggestions.append(
+                        _suggestion("descrições parecidas", store, by_description[a] + by_description[b])
+                    )
+    return suggestions
+
+
+def _warnings(members: list[dict]) -> list[str]:
+    prices = [price for member in members for price in member["prices"]]
+    warnings = []
+    if len({member["unit"] for member in members}) > 1:
+        warnings.append("unidades diferentes")
+    if prices and max(prices) / min(prices) > 1.5:
+        warnings.append(f"preços muito diferentes ({min(prices):.2f} a {max(prices):.2f})")
+    return warnings
+
+
+def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
+    warnings = _warnings(members)
+    first = min(members, key=lambda m: m["description"])
+    return {
+        "reason": reason,
+        "name": first["description"],
+        "refs": [f"{store}:{member['code']}" for member in sorted(members, key=lambda m: m["code"])],
+        "members": members,
+        "warnings": warnings,
+    }
+
+
+def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
+    """Tira das sugestões as referências marcadas como "não juntar".
+
+    Sugestão que ficar com menos de 2 produtos some; duplicadas (mesmas
+    referências, ex.: "mesma descrição" e "parecidas") são unificadas.
+    """
+    result, seen = [], set()
+    for suggestion in suggestions:
+        refs = [ref for ref in suggestion["refs"] if ref not in rejected]
+        key = tuple(refs)
+        if len(refs) < 2 or key in seen:
+            continue
+        seen.add(key)
+        keep = {ref.split(":", 1)[1] for ref in refs}
+        members = [m for m in suggestion["members"] if m["code"] in keep]
+        result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
+    return result
+
+
+# cnpj é o de uma das filiais: suggest_groups e as referências só usam a raiz.
+PRODUCT_ROWS_QUERY = """
+SELECT h.seller_cnpj AS cnpj, h.product_code AS code, h.description, h.unit,
+       group_concat(h.unit_price) AS prices, COUNT(DISTINCT h.access_key) AS purchases,
+       MAX(h.issued_at) AS last,
+       COALESCE(s.store, h.seller_name) AS store
+FROM price_history h
+LEFT JOIN stores s ON s.cnpj_root = substr(h.seller_cnpj, 1, 8)
+GROUP BY substr(h.seller_cnpj, 1, 8), h.product_code, h.description, h.unit
+"""
+
+GROUPS_QUERY = """
+SELECT g.name, r.cnpj_root || ':' || r.product_code AS ref
+FROM product_groups g
+JOIN group_refs r ON r.group_id = g.id
+ORDER BY g.id, r.rowid
+"""
+
+NOTES_QUERY = """
+SELECT substr(n.seller_cnpj, 1, 8) || ':' || i.product_code AS ref,
+       n.issued_at, n.source_file, n.source_path, n.number, n.access_key,
+       SUM(i.quantity) AS quantity, MIN(i.unit_price) AS price
+FROM items i JOIN notes n USING (access_key)
+GROUP BY n.access_key, i.product_code
+ORDER BY n.issued_at DESC
+"""
+
+
+def load_product_rows(conn: sqlite3.Connection) -> list[dict]:
+    """Uma linha por (raiz do CNPJ, código, descrição, unidade)."""
+    return [
+        {**dict(row), "prices": [float(price) for price in row["prices"].split(",")]}
+        for row in conn.execute(PRODUCT_ROWS_QUERY)
+    ]
+
+
+def list_ref_products(rows: list[dict]) -> list[dict]:
+    """Um produto por referência raiz:código, com a descrição mais recente."""
+    products: dict[str, dict] = {}
+    for row in sorted(rows, key=lambda r: r["last"]):
+        ref = f"{row['cnpj'][:8]}:{row['code']}"
+        product = products.setdefault(
+            ref,
+            {"ref": ref, "code": row["code"], "units": [], "prices": [], "purchases": 0, "store": row["store"]},
+        )
+        product["description"] = row["description"]
+        if row["unit"] not in product["units"]:
+            product["units"].append(row["unit"])
+        product["prices"] += row["prices"]
+        product["purchases"] += row["purchases"]
+    return [
+        {
+            "ref": product["ref"],
+            "code": product["code"],
+            "description": product["description"],
+            "unit": "/".join(product["units"]),
+            "store": product["store"],
+            "purchases": product["purchases"],
+            "min": min(product["prices"]),
+            "max": max(product["prices"]),
+        }
+        for product in products.values()
+    ]
+
+
+def list_suggestions(rows: list[dict], rejected: set[str]) -> list[dict]:
+    return [
+        {"name": s["name"], "reason": s["reason"], "refs": s["refs"], "warnings": s["warnings"]}
+        for s in drop_rejected(suggest_groups(rows), rejected)
+    ]
+
+
+def list_groups(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = {}
+    for row in conn.execute(GROUPS_QUERY):
+        groups.setdefault(row["name"], []).append(row["ref"])
+    return groups
+
+
+def list_notes(conn: sqlite3.Connection, data_dir: Path) -> dict[str, list[dict]]:
+    """Notas em que cada produto aparece. O link só existe se a rota de PDF puder entregar."""
+    hrefs: dict[str, str | None] = {}
+    notes: dict[str, list[dict]] = {}
+    for row in conn.execute(NOTES_QUERY):
+        key = row["access_key"]
+        if key not in hrefs:
+            hrefs[key] = f"/notes/{key}.pdf" if resolve_in_data(row["source_path"], data_dir) else None
+        notes.setdefault(row["ref"], []).append(
+            {
+                "date": row["issued_at"][:10],
+                "number": row["number"],
+                "file": row["source_file"],
+                "href": hrefs[key],
+                "quantity": row["quantity"],
+                "price": row["price"],
+            }
+        )
+    return notes
+
+
+def load_rejected_refs(legacy_dir: Path | None) -> set[str]:
+    """Referências de products.rejected.json, até a rejeição ir para o banco."""
+    return {ref for refs in read_legacy_json(legacy_dir, "products.rejected.json").values() for ref in refs}
+
+
+def build_catalog(conn: sqlite3.Connection, data_dir: Path, rejected: set[str]) -> dict:
+    """Os dados da página de agrupamento."""
+    rows = load_product_rows(conn)
+    return {
+        "products": list_ref_products(rows),
+        "suggestions": list_suggestions(rows, rejected),
+        "groups": list_groups(conn),
+        "notes": list_notes(conn, data_dir),
+    }
+
+
+def find_note_pdf(conn: sqlite3.Connection, data_dir: Path, access_key: str) -> Path | None:
+    row = conn.execute("SELECT source_path FROM notes WHERE access_key = ?", (access_key,)).fetchone()
+    return resolve_in_data(row["source_path"], data_dir) if row else None

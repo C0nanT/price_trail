@@ -2,36 +2,24 @@
 import json
 import logging
 import sqlite3
-import subprocess
 import sys
 from pathlib import Path
 
 from .db import connect
 from .nfce import Note, NoteError, parse_note
-
-
-def extract_text(path: Path) -> str:
-    """Extrai o texto na ordem visual.
-
-    Não usar -raw: ele separa rótulos de valores nos totais e joga esses valores
-    no meio dos itens, na quebra de página.
-    """
-    result = subprocess.run(
-        ["pdftotext", "-layout", str(path), "-"],
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if result.returncode != 0:
-        raise NoteError(f"pdftotext falhou: {result.stderr.strip()}")
-    return result.stdout
+from .pdfs import extract_text, find_pdfs, path_in_data
 
 
 def save_note(conn: sqlite3.Connection, note: Note, source_file: str) -> bool:
     """Grava a nota e seus itens atomicamente. Retorna False se ela já existia."""
     with conn:
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            """
+            INSERT OR IGNORE INTO notes (
+                access_key, seller_cnpj, seller_name, seller_address, number, series, issued_at,
+                item_count, total_cents, discount_cents, paid_cents, source_file
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
             (
                 note.access_key,
                 note.seller_cnpj,
@@ -70,6 +58,18 @@ def save_note(conn: sqlite3.Connection, note: Note, source_file: str) -> bool:
     return True
 
 
+def update_source_path(conn: sqlite3.Connection, access_key: str, source_path: str) -> None:
+    """Aponta a nota para o arquivo que acabou de ser lido, que é dela com certeza.
+
+    Vale também quando o caminho antigo ainda existe: ele pode ser agora outra nota.
+    """
+    with conn:
+        conn.execute(
+            "UPDATE notes SET source_path = ? WHERE access_key = ? AND source_path IS NOT ?",
+            (source_path, access_key, source_path),
+        )
+
+
 def load_known_stores(path: Path) -> set[str]:
     """Prefixos de CNPJ (8 dígitos) cadastrados em stores.json; vazio se ausente."""
     try:
@@ -82,12 +82,14 @@ def is_unknown_store(cnpj: str, known: set[str]) -> bool:
     return cnpj[:8] not in known
 
 
-def find_pdfs(folder: Path) -> list[Path]:
-    return sorted(p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf")
+def import_folder(
+    folder: Path, db: Path, stores: Path, log_file: Path, data_dir: Path, legacy_dir: Path | None = None
+) -> int:
+    """Importa os PDFs da pasta. Retorna o código de saída (0, 1 com erros, 2 sem pasta).
 
-
-def import_folder(folder: Path, db: Path, stores: Path, log_file: Path, legacy_dir: Path | None = None) -> int:
-    """Importa os PDFs da pasta. Retorna o código de saída (0, 1 com erros, 2 sem pasta)."""
+    data_dir é a pasta de dados, a que o servidor usa para abrir os PDFs. folder
+    pode ser ela ou uma subpasta; de fora dela, as notas ficam sem link para o PDF.
+    """
     logging.basicConfig(
         filename=log_file,
         encoding="utf-8",
@@ -102,7 +104,12 @@ def import_folder(folder: Path, db: Path, stores: Path, log_file: Path, legacy_d
         print(f"pasta não encontrada: {folder}", file=sys.stderr)
         return 2
 
-    conn = connect(db, legacy_dir)
+    conn = connect(db, data_dir, legacy_dir)
+
+    if path_in_data(folder, data_dir) is None:
+        message = f"{folder} está fora da pasta de dados ({data_dir}): as notas ficam sem link para o PDF; use --data"
+        log.warning(message)
+        print(f"AVISO  {message}", file=sys.stderr)
 
     known_stores = load_known_stores(stores)
     warned_stores: set[str] = set()
@@ -129,7 +136,11 @@ def import_folder(folder: Path, db: Path, stores: Path, log_file: Path, legacy_d
             )
             log.warning(message)
             print(f"AVISO  {message}", file=sys.stderr)
-        if save_note(conn, note, path.name):
+        is_new = save_note(conn, note, path.name)
+        source_path = path_in_data(path, data_dir)
+        if source_path is not None:
+            update_source_path(conn, note.access_key, source_path)
+        if is_new:
             imported += 1
             print(f"NOVA   {path.name}: {note.seller_name}, {len(note.items)} itens, {note.issued_at}")
         else:

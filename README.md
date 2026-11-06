@@ -39,8 +39,11 @@ Salve a nota como PDF a partir dessa página e coloque o arquivo em `data/`.
 Para usar outra pasta ou outro banco:
 
 ```bash
-python3 -m pricetrail import outra/pasta --db outro.sqlite
+python3 -m pricetrail import --data outra/pasta --db outro.sqlite
 ```
+
+`--data` é a pasta de dados, a mesma que o `serve` usa para abrir os PDFs. Para ler só
+uma subpasta dela, passe a subpasta: `python3 -m pricetrail import data/2026`.
 
 Pode rodar quantas vezes quiser. A nota é identificada pela chave de acesso,
 então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
@@ -55,7 +58,8 @@ python3 -m pricetrail serve
 
 A página lê direto do banco: depois de importar notas, basta recarregar. Dá para
 importar com o servidor ligado. O servidor só aceita conexões da sua máquina, porque
-os PDFs contêm seu CPF. Use `--port` para outra porta e `--db` para outro banco.
+os PDFs contêm seu CPF. Use `--port` para outra porta, `--db` para outro banco e
+`--data` para outra pasta de dados.
 
 Filtre por categoria (Mercado, Farmácia…) e, dentro dela, por estabelecimento
 (Atacadão, Farmácia Preço Popular…). Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
@@ -134,21 +138,18 @@ porque a mesma descrição às vezes cobre tamanhos diferentes. Para revisar:
 python3 suggest_products.py        # mostra candidatos e escreve products.suggested.json
 ```
 
-Ou, mais fácil, use a página de agrupamento:
-
-```bash
-python3 group_page.py
-xdg-open group_page/index.html
-```
+Ou, mais fácil, use a página de agrupamento, em <http://127.0.0.1:8000/groups> com o
+servidor ligado. Ela lê os produtos e os grupos direto do banco.
 
 Cada produto tem "Ver nota (N)", com a lista das notas onde ele aparece e um link para
-abrir o PDF (da pasta `data/`, achado pela chave de acesso mesmo se o arquivo foi
-renomeado). Use Ctrl+F no PDF para achar o item.
+abrir o PDF. O caminho de cada PDF fica no banco: se você renomear ou mover o arquivo
+dentro de `data/`, rode a importação de novo e o link volta a funcionar. Use Ctrl+F no
+PDF para achar o item.
 
 Nela você marca produtos (ou clica numa sugestão), dá um nome, cria o grupo e
-exporta o `products.json` (Baixar, Copiar ou, no Chrome, Salvar direto). Ela já
-carrega os grupos do `products.json` atual, então dá para renomear, tirar produtos
-e excluir grupos. Substitua o arquivo na pasta do projeto e rode `python3 chart.py`.
+exporta o `products.json` (Baixar, Copiar ou, no Chrome, Salvar direto). Dá para
+renomear, tirar produtos e excluir grupos. Por enquanto a página ainda não salva no
+banco, que só carrega o `products.json` na primeira abertura.
 
 Manualmente: copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
 ser tamanhos diferentes) e rode `python3 chart.py`. Cada referência é um código de
