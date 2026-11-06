@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agrupar produtos</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/static/group/style.css">
 </head>
 <body>
 <header class="top">
   <h1>Agrupar produtos</h1>
+  <a href="/">Ver gráfico</a>
   <div class="actions">
     <span id="status" role="status" aria-live="polite"></span>
     <button id="save" hidden>Salvar products.json</button>
@@ -17,6 +18,7 @@
   </div>
 </header>
 
+<p id="error" class="warn" role="alert" hidden></p>
 <main>
   <section class="panel" aria-labelledby="h-products">
     <h2 id="h-products">Produtos <small id="count"></small></h2>
@@ -49,7 +51,6 @@
     <ul id="groups" class="groups"></ul>
   </section>
 </main>
-<script src="data.js"></script>
-<script src="app.js"></script>
+<script src="/static/group/app.js"></script>
 </body>
 </html>

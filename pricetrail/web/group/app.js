@@ -1,27 +1,34 @@
 "use strict";
-const { products, suggestions, groups: savedGroups, notes = {} } = window.DATA;
 const STORAGE_KEY = "pricetrail-groups";
 const PRICE_RATIO_WARN = 1.5;
 
 const el = (id) => document.getElementById(id);
-const byRef = new Map(products.map((p) => [p.ref, p]));
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const normalize = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
-let groups = structuredClone(savedGroups); // nome -> [referências]
+// Dados de GET /api/catalog; applyCatalog os troca de uma vez.
+let products = [];
+let suggestions = [];
+let notes = {};
+let byRef = new Map();
+
+let groups = {}; // nome -> [referências]
 let selected = new Set();
 let nameTouched = false;
 let dirty = false;
 
 // ---- persistência local (só conveniência; o arquivo é o products.json) ----
-const baseKey = JSON.stringify(savedGroups);
-try {
-  const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-  if (stored && stored.base === baseKey) {
-    groups = stored.groups;
-    dirty = true;
-  }
-} catch { /* sem storage: segue sem restaurar */ }
+let baseKey = "";
+
+function restoreDraft() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    if (stored && stored.base === baseKey) {
+      groups = stored.groups;
+      dirty = true;
+    }
+  } catch { /* sem storage: segue sem restaurar */ }
+}
 
 function persist() {
   dirty = true;
@@ -266,6 +273,27 @@ window.addEventListener("beforeunload", (event) => {
   if (dirty) event.preventDefault();
 });
 
+// ---- carga ----
+async function loadCatalog() {
+  if (window.DATA) return window.DATA; // página gerada pelo group_page.py, até ele sair
+  const response = await fetch("/api/catalog");
+  if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
+  return response.json();
+}
+
+function showError(error) {
+  el("error").textContent = `Não foi possível carregar os produtos (${error.message}). `
+    + "Confira se o servidor está rodando e recarregue a página.";
+  el("error").hidden = false;
+}
+
+function applyCatalog(data) {
+  ({ products, suggestions, notes } = data);
+  byRef = new Map(products.map((p) => [p.ref, p]));
+  groups = structuredClone(data.groups);
+  baseKey = JSON.stringify(data.groups);
+}
+
 // ---- ligação ----
 function renderAll() {
   renderStatus();
@@ -281,5 +309,17 @@ el("ungrouped").addEventListener("change", renderProducts);
 el("name").addEventListener("input", () => { nameTouched = true; renderDraft(); });
 el("create").addEventListener("click", createGroup);
 el("clear").addEventListener("click", () => { selected = new Set(); nameTouched = false; renderDraft(); renderProducts(); });
-fillStores();
-renderAll();
+
+async function start() {
+  try {
+    applyCatalog(await loadCatalog());
+  } catch (error) {
+    showError(error);
+    return;
+  }
+  restoreDraft();
+  fillStores();
+  renderAll();
+}
+
+start();

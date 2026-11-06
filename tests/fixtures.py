@@ -52,6 +52,7 @@ def make_text(
     cnpj_text="75.315.333/0290-00",
     omit_total=False,
     between_items="",
+    issued="02/10/2026",
 ):
     key = key or make_key(number=number)
     items = items if items is not None else MERCADO_ITEMS
@@ -73,6 +74,6 @@ def make_text(
         "   JUSCELINO KUBITSCHECK DE OLIVE , 469 , , ESTREITO ,\n"
         "   FLORIANOPOLIS , SC\n\n"
         f"{body}\n{totals}\n"
-        f"Número: {number} Série: 528 Emissão: 02/10/2026 19:53:38 - Via Consumidor 2\n"
+        f"Número: {number} Série: 528 Emissão: {issued} 19:53:38 - Via Consumidor 2\n"
         f"Chave de acesso:\n{spaced(key)}\n"
     )

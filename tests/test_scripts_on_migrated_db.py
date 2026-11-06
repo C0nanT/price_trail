@@ -1,7 +1,11 @@
 """chart.py e group_page.py seguem funcionando num banco migrado, até saírem do projeto."""
+import contextlib
+import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import chart
 import group_page
@@ -32,6 +36,19 @@ class MigratedDatabaseTests(unittest.TestCase):
         (self.root / "a.pdf").write_text("não é pdf de verdade")
         notes = group_page.load_notes(self.db, self.root, self.root / "group_page")
         self.assertEqual(notes["75315333:14691"][0]["href"], "../a.pdf")
+
+    def test_group_page_gera_a_pagina_que_abre_como_arquivo(self):
+        out = self.root / "group_page"
+        argv = ["group_page.py", "--db", str(self.db), "--data", str(self.root), "--out", str(out)]
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(group_page.main(), 0)
+        html = (out / "index.html").read_text(encoding="utf-8")
+        self.assertLess(html.index('src="data.js"'), html.index('src="app.js"'))
+        self.assertIn('href="style.css"', html)
+        self.assertNotIn("/static/", html)
+        self.assertIn("window.DATA", (out / "data.js").read_text(encoding="utf-8"))
+        self.assertIn("window.DATA", (out / "app.js").read_text(encoding="utf-8"))
+        self.assertTrue((out / "style.css").is_file())
 
 
 if __name__ == "__main__":

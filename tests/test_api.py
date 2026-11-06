@@ -1,48 +1,11 @@
 """Comportamento externo do servidor: cliente de teste do Flask sobre um banco temporário."""
-import json
 import sqlite3
-import tempfile
 import unittest
-from pathlib import Path
 
 from pricetrail import importer, nfce
 from pricetrail.db import SCHEMA, MigrationError, connect
-from pricetrail.server import create_app
-from tests.fixtures import make_key, make_text
-
-
-def item(code, description="DET YPE", unit="UND9", price="5,00"):
-    return (description, code, "1", unit, price, price)
-
-
-class ApiTestCase(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
-        self.db = self.root / "t.sqlite"
-        self.legacy = self.root / "legado"
-        self.legacy.mkdir()
-
-    def write_legacy(self, name, content):
-        (self.legacy / name).write_text(json.dumps(content), encoding="utf-8")
-
-    def client(self):
-        return create_app(self.db, self.legacy).test_client()
-
-    def add_note(self, *items, number=1, cnpj="75315333029000", cnpj_text="75.315.333/0290-00"):
-        total = f"{sum(int(i[5].replace(',', '')) for i in items) / 100:.2f}".replace(".", ",")
-        note = nfce.parse_note(make_text(
-            list(items), total=total, discount="", paid=total, number=number,
-            key=make_key(cnpj=cnpj, number=number), cnpj_text=cnpj_text))
-        conn = connect(self.db, self.legacy)
-        importer.save_note(conn, note, f"{number}.pdf")
-        conn.close()
-
-    def products(self):
-        response = self.client().get("/api/products")
-        self.assertEqual(response.status_code, 200)
-        return response.get_json()
+from tests.api_case import ApiTestCase, item
+from tests.fixtures import make_text
 
 
 class ProductsTests(ApiTestCase):
@@ -212,7 +175,7 @@ class HostTests(ApiTestCase):
     def test_recusa_outro_host_em_qualquer_rota(self):
         client = self.client()
         for host in ("evil.example", "evil.example:8000", "localhost.evil.example", "127.0.0.1.evil.example"):
-            for path in ("/", "/api/products", "/static/chart/app.js"):
+            for path in ("/", "/groups", "/api/products", "/static/chart/app.js"):
                 with self.subTest(host=host, path=path):
                     self.assertEqual(client.get(path, headers={"Host": host}).status_code, 403)
 
@@ -227,7 +190,7 @@ class ImportWithServerTests(ApiTestCase):
     def test_importa_enquanto_outra_conexao_esta_lendo(self):
         client = self.client()
         self.add_note(item("10"), number=1)
-        reader = connect(self.db, self.legacy)
+        reader = connect(self.db)
         self.addCleanup(reader.close)
         reader.execute("BEGIN")
         self.assertEqual(reader.execute("SELECT COUNT(*) FROM notes").fetchone()[0], 1)
@@ -247,6 +210,29 @@ class ChartPageTests(ApiTestCase):
         script = client.get("/static/chart/app.js").get_data(as_text=True)
         self.assertIn('fetch("/api/products")', script)
         self.assertEqual(client.get("/static/chart/style.css").status_code, 200)
+
+    def test_pagina_tem_link_para_o_agrupamento(self):
+        self.assertIn('href="/groups"', self.client().get("/").get_data(as_text=True))
+
+
+class GroupPageTests(ApiTestCase):
+    def test_pagina_busca_os_dados_na_api(self):
+        self.add_note(item("10", "PRODUTO QUE NAO VAI NO HTML"))
+        client = self.client()
+        page = client.get("/groups")
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        self.assertIn("Agrupar produtos", html)
+        self.assertNotIn("PRODUTO QUE NAO VAI NO HTML", html)
+        self.assertNotIn("data.js", html)
+        script = client.get("/static/group/app.js").get_data(as_text=True)
+        self.assertIn('fetch("/api/catalog")', script)
+        self.assertEqual(client.get("/static/group/style.css").status_code, 200)
+
+    def test_pagina_tem_link_para_o_grafico_e_area_de_erro(self):
+        html = self.client().get("/groups").get_data(as_text=True)
+        self.assertIn('href="/"', html)
+        self.assertIn('id="error"', html)
 
 
 if __name__ == "__main__":

@@ -5,25 +5,17 @@ products.json mapeia um nome canônico para uma lista de referências:
   - "DET.LIQ.YPE"         descrição exata (sem acento/pontuação/caixa), qualquer loja e código
 Nada é agrupado sem estar listado ali.
 """
-import difflib
 import json
 import re
-import unicodedata
-from collections import defaultdict
 from pathlib import Path
 
+from pricetrail.catalog import drop_rejected, normalize, suggest_groups  # noqa: F401
+
 CODE_REF_RE = re.compile(r"^(\d{8}):(\S+)$")
-SIMILAR_RATIO = 0.88
 
 
 class ProductsError(Exception):
     """products.json inválido."""
-
-
-def normalize(text: str) -> str:
-    text = unicodedata.normalize("NFD", text).upper()
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return " ".join(re.sub(r"[^A-Z0-9]+", " ", text).split())
 
 
 class Resolver:
@@ -61,76 +53,6 @@ def load_groups(path: Path) -> dict[str, list[str]]:
     ):
         raise ProductsError(f'{path.name} deve ser {{"Nome": ["referência", ...]}}')
     return data
-
-
-def suggest_groups(rows: list[dict]) -> list[dict]:
-    """Candidatos a agrupamento, para revisão humana. Nada é aplicado.
-
-    rows: um dict por (cnpj, código, unidade) com cnpj, code, description, unit,
-    prices (lista), purchases (int). Sugere, na mesma loja: mesma descrição com
-    códigos diferentes, e descrições quase iguais.
-    """
-    by_store = defaultdict(list)
-    for row in rows:
-        by_store[row["cnpj"][:8]].append(row)
-
-    suggestions = []
-    for store, items in by_store.items():
-        by_description = defaultdict(list)
-        for item in items:
-            by_description[normalize(item["description"])].append(item)
-        for description, members in sorted(by_description.items()):
-            if len(members) > 1:
-                suggestions.append(_suggestion("mesma descrição", store, members))
-        names = sorted(by_description)
-        for index, a in enumerate(names):
-            for b in names[index + 1 :]:
-                if difflib.SequenceMatcher(None, a, b).ratio() > SIMILAR_RATIO:
-                    suggestions.append(
-                        _suggestion("descrições parecidas", store, by_description[a] + by_description[b])
-                    )
-    return suggestions
-
-
-def _warnings(members: list[dict]) -> list[str]:
-    prices = [price for member in members for price in member["prices"]]
-    warnings = []
-    if len({member["unit"] for member in members}) > 1:
-        warnings.append("unidades diferentes")
-    if prices and max(prices) / min(prices) > 1.5:
-        warnings.append(f"preços muito diferentes ({min(prices):.2f} a {max(prices):.2f})")
-    return warnings
-
-
-def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
-    warnings = _warnings(members)
-    first = min(members, key=lambda m: m["description"])
-    return {
-        "reason": reason,
-        "name": first["description"],
-        "refs": [f"{store}:{member['code']}" for member in sorted(members, key=lambda m: m["code"])],
-        "members": members,
-        "warnings": warnings,
-    }
-
-
-def drop_rejected(suggestions: list[dict], rejected: set[str]) -> list[dict]:
-    """Tira das sugestões as referências marcadas como "não juntar".
-
-    Sugestão que ficar com menos de 2 produtos some; duplicadas (mesmas
-    referências, ex.: "mesma descrição" e "parecidas") são unificadas.
-    """
-    result, seen = [], set()
-    for suggestion in suggestions:
-        refs = [ref for ref in suggestion["refs"] if ref not in rejected]
-        key = tuple(refs)
-        if len(refs) < 2 or key in seen:
-            continue
-        seen.add(key)
-        keep = {ref.split(":", 1)[1] for ref in refs}
-        members = [m for m in suggestion["members"] if m["code"] in keep]
-        result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
-    return result
 
 
 def load_rejected(path: Path) -> set[str]:
