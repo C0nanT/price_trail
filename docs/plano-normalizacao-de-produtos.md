@@ -1,6 +1,12 @@
 # Plano: normalização de produtos
 
-Status: **planejado, não implementado**.
+Status: **implementado na variante manual (B)**. Nada é agrupado automaticamente:
+`suggest_products.py` lista candidatos, você copia os aprovados para `products.json`
+e `chart.py` aplica. Não foram criadas tabelas `products`/`product_aliases` no banco;
+o agrupamento vive só no `products.json` e na geração do gráfico. Junção automática
+(com faixa de preço/unidade) e código de barras seguem como evolução possível.
+
+Plano original:
 
 ## Problema
 
@@ -36,3 +42,17 @@ O mesmo produto aparece separado no gráfico:
 - Produto sem regra continua aparecendo pela descrição original.
 - Testes: normalização de texto, junção por código duplicado, `products.json`
   ausente/inválido.
+
+## Achados nos dados reais (revisão antes de implementar)
+
+Agrupar por (CNPJ8, descrição normalizada) gera 28 grupos com 2+ códigos entre
+354 produtos. Eles **não são todos o mesmo produto**:
+
+- Mesmo produto, preço igual: `DET.LIQ.YPE` (3 códigos, sempre 2,79),
+  `REFR.PO CLIGHT` (6 códigos, sempre 1,79: provavelmente sabores).
+- Variantes com preços bem diferentes: `AGUA SANIT.Q.BOA` (4,59 x 6,98, tamanhos),
+  `MOLHO TOM.POMAROLA` (2,99 / 4,99 / 5,29 / 18,90).
+- Unidades diferentes no mesmo grupo: `PULLMAN RAP 10` (EMB x UND).
+
+Conclusão: junção automática só pela descrição pode misturar tamanhos e esconder
+variação real de preço. A decisão de como juntar está pendente.

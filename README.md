@@ -113,6 +113,25 @@ lojas podem aparecer como `ERRO` se o layout for diferente.
 Mantenha os PDFs em `data/`. Se o formato do banco mudar, eles permitem recriá-lo:
 apague `pricetrail.sqlite` e rode o script de novo.
 
+## Juntar o mesmo produto (products.json)
+
+O mesmo produto pode aparecer com códigos diferentes. Nada é juntado sozinho,
+porque a mesma descrição às vezes cobre tamanhos diferentes. Para revisar:
+
+```bash
+python3 suggest_products.py        # mostra candidatos e escreve products.suggested.json
+```
+
+Copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
+ser tamanhos diferentes) e rode `python3 chart.py`. Cada referência é um código de
+loja (`"75315333:11757"`, 8 dígitos do CNPJ + código) ou uma descrição exata:
+
+```json
+{"Detergente Ypê": ["75315333:11757", "75315333:13453", "75315333:22392"]}
+```
+
+Produtos com unidades diferentes não são juntados. Sem `products.json`, tudo fica como antes.
+
 ## Testes
 
 Sem dependências extras. Os testes usam notas sintéticas (nenhum PDF real):
@@ -135,6 +154,6 @@ Lojas fora do `stores.json` geram um aviso no terminal e no log durante a import
 
 ## Planejado
 
-- [Normalização de produtos](docs/plano-normalizacao-de-produtos.md)
+- [Normalização de produtos](docs/plano-normalizacao-de-produtos.md) (feito, manual)
 - [Filtros e destaques no gráfico](docs/plano-filtros-do-grafico.md) (feito)
 - [Busca por código de barras](docs/handoff-codigo-de-barras.md)

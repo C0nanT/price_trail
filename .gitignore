@@ -3,3 +3,4 @@ data/*
 chart.html
 *.log
 __pycache__/
+products.suggested.json

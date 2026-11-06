@@ -12,8 +12,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from products import ProductsError, Resolver, load_groups
+
 PROJECT_DIR = Path(__file__).resolve().parent
 STORES_FILE = PROJECT_DIR / "stores.json"
+PRODUCTS_FILE = PROJECT_DIR / "products.json"
 
 # Linhas repetidas de um produto na mesma nota e com o mesmo preço viram uma compra.
 QUERY = """
@@ -227,8 +230,8 @@ function fillSelect(node, values, allLabel) {
 }
 
 function fillStores() {
-  const inCategory = products.filter((p) => !categorySelect.value || p.category === categorySelect.value);
-  fillSelect(storeSelect, [...new Set(inCategory.map((p) => p.store))].sort(), "Todos");
+  const inCategory = products.filter((p) => !categorySelect.value || p.categories.includes(categorySelect.value));
+  fillSelect(storeSelect, [...new Set(inCategory.flatMap((p) => p.stores))].sort(), "Todos");
 }
 
 function dateBound(input, endOfDay) {
@@ -274,8 +277,8 @@ function fillOptions() {
   const terms = normalize(search.value).split(/\s+/).filter(Boolean);
   const entries = [];
   products.forEach((product, index) => {
-    if (categorySelect.value && product.category !== categorySelect.value) return;
-    if (storeSelect.value && product.store !== storeSelect.value) return;
+    if (categorySelect.value && !product.categories.includes(categorySelect.value)) return;
+    if (storeSelect.value && !product.stores.includes(storeSelect.value)) return;
     const haystack = normalize(`${product.description} ${product.code} ${product.seller}`);
     if (!terms.every((term) => haystack.includes(term))) return;
     const purchases = purchasesIn(product);
@@ -284,7 +287,7 @@ function fillOptions() {
   });
   const previous = select.value;
   select.replaceChildren(...sortMatches(entries).map(({ product, index, count }) => {
-    const label = `${product.description} (${product.code}) · ${count} ${count === 1 ? "compra" : "compras"}`;
+    const label = `${product.description} (${product.code.length > 24 ? product.code.slice(0, 21) + "…" : product.code}) · ${count} ${count === 1 ? "compra" : "compras"}`;
     return new Option(label, index);
   }));
   if ([...select.options].some((option) => option.value === previous)) select.value = previous;
@@ -328,7 +331,7 @@ function renderTable(product) {
     const row = document.createElement("tr");
     const cells = [
       [dateFormat.format(purchase.date), ""],
-      [product.seller, ""],
+      [purchase.seller, ""],
       [moneyFormat.format(purchase.price), "number"],
       [`${quantityFormat.format(purchase.quantity)} ${product.unit}`, "number"],
       [moneyFormat.format(purchase.total), "number"],
@@ -516,7 +519,7 @@ for (const input of [fromInput, toInput, sortSelect]) input.addEventListener("ch
 select.addEventListener("change", render);
 el("current").addEventListener("input", render);
 new ResizeObserver(render).observe(chart);
-fillSelect(categorySelect, [...new Set(products.map((p) => p.category))].sort(), "Todas");
+fillSelect(categorySelect, [...new Set(products.flatMap((p) => p.categories))].sort(), "Todas");
 fillStores();
 fillOptions();
 </script>
@@ -532,34 +535,49 @@ def load_stores(path: Path) -> dict[str, dict]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_products(db_path: Path, stores: dict[str, dict]) -> list[dict]:
+def load_products(db_path: Path, stores: dict[str, dict], resolver: Resolver | None = None) -> list[dict]:
+    """Um produto por (loja, código, unidade), ou por (grupo de products.json, unidade)."""
+    resolver = resolver or Resolver({})
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     products: dict[tuple, dict] = {}
     for row in conn.execute(QUERY):
-        key = (row["seller_cnpj"], row["product_code"], row["unit"])
+        group = resolver.resolve(row["seller_cnpj"], row["product_code"], row["description"])
+        key = (group, row["unit"]) if group else (row["seller_cnpj"], row["product_code"], row["unit"])
         known = stores.get(row["seller_cnpj"][:8], {})
         product = products.setdefault(
             key,
             {
                 "code": row["product_code"],
-                "description": row["description"],
-                "seller": row["seller_name"],
-                "store": known.get("store", row["seller_name"]),
-                "category": known.get("category", "Outros"),
+                "description": group or row["description"],
                 "unit": row["unit"],
+                "sellers": [],
+                "stores": [],
+                "categories": [],
                 "purchases": [],
             },
         )
+        store = known.get("store", row["seller_name"])
+        category = known.get("category", "Outros")
+        for field, value in (("sellers", row["seller_name"]), ("stores", store), ("categories", category)):
+            if value not in product[field]:
+                product[field].append(value)
+        codes = product["code"].split(", ")
+        if row["product_code"] not in codes:
+            product["code"] = ", ".join(sorted(codes + [row["product_code"]]))
         product["purchases"].append(
             {
                 "issued_at": row["issued_at"],
+                "seller": row["seller_name"],
                 "price": row["unit_price"],
                 "quantity": row["quantity"],
                 "total": row["line_total"],
             }
         )
     conn.close()
+    for product in products.values():
+        product["purchases"].sort(key=lambda purchase: purchase["issued_at"])
+        product["seller"] = ", ".join(product.pop("sellers"))
     return sorted(
         products.values(),
         key=lambda product: (-len(product["purchases"]), product["description"]),
@@ -576,7 +594,12 @@ def main() -> int:
         print(f"banco não encontrado: {args.db}. Rode pricetrail.py primeiro.", file=sys.stderr)
         return 2
 
-    products = load_products(args.db, load_stores(STORES_FILE))
+    try:
+        resolver = Resolver(load_groups(PRODUCTS_FILE))
+    except ProductsError as error:
+        print(f"products.json: {error}", file=sys.stderr)
+        return 2
+    products = load_products(args.db, load_stores(STORES_FILE), resolver)
     data = json.dumps(products, ensure_ascii=False).replace("</", "<\\/")
     args.out.write_text(TEMPLATE.replace("__DATA__", data), encoding="utf-8")
     print(f"{len(products)} produtos em {args.out}")

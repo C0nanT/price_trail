@@ -1,0 +1,10 @@
+# Docs de features
+
+| Documento | Status |
+|-----------|--------|
+| [plano-filtros-do-grafico.md](plano-filtros-do-grafico.md) | **Implementado** (intervalo de datas, ordenação, badge de variação) |
+| [plano-normalizacao-de-produtos.md](plano-normalizacao-de-produtos.md) | **Implementado (manual)**: `suggest_products.py` + `products.json` |
+| [handoff-codigo-de-barras.md](handoff-codigo-de-barras.md) | Pausado |
+
+Já feito fora dos planos: testes do parser (`tests/`), hook `pre-push`, aviso de
+loja fora do `stores.json`.
