@@ -110,3 +110,29 @@ lojas podem aparecer como `ERRO` se o layout for diferente.
 
 Mantenha os PDFs em `data/`. Se o formato do banco mudar, eles permitem recriá-lo:
 apague `pricetrail.sqlite` e rode o script de novo.
+
+## Testes
+
+Sem dependências extras. Os testes usam notas sintéticas (nenhum PDF real):
+
+```bash
+python3 -m unittest discover -s tests -t .
+```
+
+Quando uma nota nova der erro no importador, copie o trecho de texto que falhou
+para `tests/fixtures.py` e adicione um teste antes de corrigir o parser.
+
+Um hook `pre-push` roda os testes antes de cada push. Ele fica em `.githooks/` e
+precisa ser ativado uma vez por clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Lojas fora do `stores.json` geram um aviso no terminal e no log durante a importação.
+
+## Planejado
+
+- [Normalização de produtos](docs/plano-normalizacao-de-produtos.md)
+- [Filtros e destaques no gráfico](docs/plano-filtros-do-grafico.md)
+- [Busca por código de barras](docs/handoff-codigo-de-barras.md)

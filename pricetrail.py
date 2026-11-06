@@ -7,6 +7,7 @@ Requer `pdftotext` (poppler-utils). Reimportar é seguro: a nota é identificada
 pela chave de acesso, não pelo arquivo. O CPF do consumidor não é armazenado.
 """
 import argparse
+import json
 import logging
 import re
 import sqlite3
@@ -312,6 +313,18 @@ def save_note(conn: sqlite3.Connection, note: Note, source_file: str) -> bool:
     return True
 
 
+def load_known_stores(path: Path) -> set[str]:
+    """Prefixos de CNPJ (8 dígitos) cadastrados em stores.json; vazio se ausente."""
+    try:
+        return set(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return set()
+
+
+def is_unknown_store(cnpj: str, known: set[str]) -> bool:
+    return cnpj[:8] not in known
+
+
 def find_pdfs(folder: Path) -> list[Path]:
     return sorted(p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf")
 
@@ -320,6 +333,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Importa PDFs de NFC-e para SQLite.")
     parser.add_argument("folder", nargs="?", type=Path, default=PROJECT_DIR / "data")
     parser.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
+    parser.add_argument("--stores", type=Path, default=PROJECT_DIR / "stores.json")
     parser.add_argument("--log", type=Path, default=PROJECT_DIR / "pricetrail.log")
     args = parser.parse_args()
 
@@ -341,6 +355,8 @@ def main() -> int:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
 
+    known_stores = load_known_stores(args.stores)
+    warned_stores: set[str] = set()
     imported = skipped = failed = 0
     for path in find_pdfs(args.folder):
         try:
@@ -355,6 +371,15 @@ def main() -> int:
             log.exception("%s: erro inesperado", path)
             print(f"ERRO   {path.name}: erro inesperado (ver {args.log.name})", file=sys.stderr)
             continue
+        prefix = note.seller_cnpj[:8]
+        if is_unknown_store(note.seller_cnpj, known_stores) and prefix not in warned_stores:
+            warned_stores.add(prefix)
+            message = (
+                f"loja fora do stores.json: {note.seller_name} (CNPJ {prefix}); "
+                f'adicione "{prefix}": {{"store": "...", "category": "..."}}'
+            )
+            log.warning(message)
+            print(f"AVISO  {message}", file=sys.stderr)
         if save_note(conn, note, path.name):
             imported += 1
             print(f"NOVA   {path.name}: {note.seller_name}, {len(note.items)} itens, {note.issued_at}")
