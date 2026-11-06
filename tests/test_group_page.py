@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pricetrail as pt
+from pricetrail import importer, nfce
+from pricetrail.db import SCHEMA
 from group_page import build_data, load_notes
 from tests.fixtures import make_text
 
@@ -38,8 +39,8 @@ class LoadNotesTests(unittest.TestCase):
         self.db, self.data, self.out = root / "t.sqlite", root / "data", root / "group_page"
         self.data.mkdir()
         conn = sqlite3.connect(self.db)
-        conn.executescript(pt.SCHEMA)
-        pt.save_note(conn, pt.parse_note(make_text()), "a.pdf")
+        conn.executescript(SCHEMA)
+        importer.save_note(conn, nfce.parse_note(make_text()), "a.pdf")
         conn.close()
 
     def tearDown(self):
