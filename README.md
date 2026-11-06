@@ -1,0 +1,106 @@
+# pricetrail
+
+Guarda o histórico de preços das suas compras. O script lê os PDFs de NFC-e da
+Consulta Pública da SEF/SC e salva produtos e preços em um banco SQLite.
+
+## De onde vêm os preços
+
+Os preços vêm das notas fiscais (NFC-e) consultadas no portal da SEF/SC:
+
+<https://sat.sef.sc.gov.br/tax.net/Sat.Dfe.Web/Consultas/ConsultaNotaCidadao.aspx>
+
+Salve a nota como PDF a partir dessa página e coloque o arquivo em `data/`.
+
+## Requisitos
+
+- Python 3.10 ou mais recente
+- `pdftotext`, do pacote poppler-utils:
+
+  ```bash
+  sudo apt install poppler-utils
+  ```
+
+## Como usar
+
+1. Salve os PDFs das notas em `data/`. Subpastas também são lidas.
+2. Ao salvar pelo Chrome, desligue a opção "Cabeçalhos e rodapés".
+3. Rode o script:
+
+   ```bash
+   python3 pricetrail.py
+   ```
+
+Para usar outra pasta ou outro banco:
+
+```bash
+python3 pricetrail.py outra/pasta --db outro.sqlite
+```
+
+Pode rodar quantas vezes quiser. A nota é identificada pela chave de acesso,
+então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
+
+## Ver o gráfico
+
+Depois de importar as notas, gere a página e abra no navegador:
+
+```bash
+python3 chart.py
+xdg-open chart.html
+```
+
+Busque um produto, escolha na lista e veja o histórico de preços, com o menor e o
+maior preço e a tabela de compras. A página funciona offline. Rode `chart.py` de
+novo sempre que importar notas.
+
+## O que aparece na saída
+
+| Saída    | Significado                                     |
+| -------- | ----------------------------------------------- |
+| `NOVA`   | Nota importada                                  |
+| `JÁ TEM` | Nota já estava no banco e foi ignorada          |
+| `ERRO`   | Nota não importada; o motivo aparece na mensagem |
+
+Antes de gravar, o script confere a chave de acesso, a quantidade de itens e os
+totais da nota. Se algo não bater, a nota inteira fica de fora e os demais
+arquivos continuam sendo processados. Nesse caso, o script termina com código 1.
+
+## Dados salvos
+
+O banco fica em `pricetrail.sqlite`:
+
+- `notes`: estabelecimento, endereço, data de emissão, totais e desconto
+- `items`: produtos da nota, com quantidade, unidade e preços
+- `price_history`: view que junta as duas tabelas, pronta para gráficos
+
+Exemplo de consulta:
+
+```bash
+sqlite3 pricetrail.sqlite "
+  SELECT purchase_date, seller_name, unit_price, price_per_kg
+  FROM price_history
+  WHERE description LIKE '%BANANA%'
+  ORDER BY purchase_date;
+"
+```
+
+O comando `sqlite3` é instalado à parte, com `sudo apt install sqlite3`.
+
+## Como interpretar os dados
+
+- **`purchase_date`:** é o dia da compra, tirado da data de emissão da nota.
+  `issued_at` traz a data com a hora.
+- **`price_per_kg`:** usa o preço unitário de itens vendidos em KG. Nos demais,
+  calcula pelo peso escrito na descrição, como `500G`. Sem peso, fica `NULL`.
+- **`unit_price`:** é o preço impresso na nota. O desconto vem só no total, então
+  fica em `notes.discount_cents` e não é dividido entre os itens.
+- **`product_code`:** é o código interno de cada loja, não o código de barras.
+  Para acompanhar um produto, agrupe por `seller_cnpj` e `product_code`.
+- **CPF:** não é salvo no banco, mas continua nos PDFs.
+
+## Limitações
+
+Até agora, o script só foi testado com uma nota do Atacadão. Notas de outras
+lojas podem aparecer como `ERRO` se o layout for diferente.
+
+Mantenha os PDFs em `data/`. Se o formato do banco mudar, eles permitem recriá-lo:
+apague `pricetrail.sqlite` e rode o script de novo.
