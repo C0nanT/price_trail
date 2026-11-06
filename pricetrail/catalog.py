@@ -261,6 +261,53 @@ def list_notes(conn: sqlite3.Connection, data_dir: Path) -> dict[str, list[dict]
     return notes
 
 
+STORES_QUERY = "SELECT cnpj_root, store, category FROM stores ORDER BY store, cnpj_root"
+
+# Uma linha por raiz presente nas notas; o nome é o da nota mais recente.
+UNREGISTERED_QUERY = """
+SELECT substr(n.seller_cnpj, 1, 8) AS cnpj_root, n.seller_name AS name, COUNT(*) AS notes, MAX(n.issued_at) AS last
+FROM notes n
+WHERE substr(n.seller_cnpj, 1, 8) NOT IN (SELECT cnpj_root FROM stores)
+GROUP BY substr(n.seller_cnpj, 1, 8)
+ORDER BY name
+"""
+
+DEFAULT_CATEGORY = "Outros"
+
+
+class StoreError(ValueError):
+    """Cadastro de loja inválido; a mensagem é mostrada ao usuário."""
+
+
+def list_stores(conn: sqlite3.Connection) -> dict:
+    """Lojas cadastradas e raízes de CNPJ das notas que ainda não têm cadastro."""
+    return {
+        "stores": [dict(row) for row in conn.execute(STORES_QUERY)],
+        "unregistered": [dict(row) for row in conn.execute(UNREGISTERED_QUERY)],
+    }
+
+
+def is_registered_store(conn: sqlite3.Connection, cnpj_root: str) -> bool:
+    return conn.execute("SELECT 1 FROM stores WHERE cnpj_root = ?", (cnpj_root,)).fetchone() is not None
+
+
+def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dict:
+    """Cria ou atualiza a loja. Categoria vazia vira "Outros"."""
+    if not (len(cnpj_root) == 8 and cnpj_root.isascii() and cnpj_root.isdigit()):
+        raise StoreError("a raiz do CNPJ deve ter 8 dígitos")
+    if not isinstance(store, str) or not store.strip():
+        raise StoreError("o nome da loja não pode ser vazio")
+    category = category.strip() if isinstance(category, str) else ""
+    row = {"cnpj_root": cnpj_root, "store": store.strip(), "category": category or DEFAULT_CATEGORY}
+    with conn:
+        conn.execute(
+            "INSERT INTO stores (cnpj_root, store, category) VALUES (:cnpj_root, :store, :category) "
+            "ON CONFLICT(cnpj_root) DO UPDATE SET store = excluded.store, category = excluded.category",
+            row,
+        )
+    return row
+
+
 def load_rejected_refs(legacy_dir: Path | None) -> set[str]:
     """Referências de products.rejected.json, até a rejeição ir para o banco."""
     return {ref for refs in read_legacy_json(legacy_dir, "products.rejected.json").values() for ref in refs}

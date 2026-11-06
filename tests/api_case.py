@@ -74,7 +74,7 @@ class ApiTestCase(unittest.TestCase):
     def import_data(self, folder=None):
         """Roda o importador e devolve o que ele escreveu em stderr."""
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
-            code = importer.import_folder(folder or self.data, self.db, self.root / "stores.json",
+            code = importer.import_folder(folder or self.data, self.db,
                                           self.root / "t.log", self.data, self.legacy)
         self.assertEqual(code, 0)
         return err.getvalue()

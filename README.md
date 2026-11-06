@@ -70,7 +70,7 @@ servidor ligado.
 
 As categorias e os nomes dos estabelecimentos vêm da tabela `stores`, indexada pelos 8
 primeiros dígitos do CNPJ (iguais em todas as filiais). Ela é carregada de `stores.json`
-na primeira vez que o banco é aberto. Loja sem cadastro aparece com o nome da nota e a
+na primeira vez que o banco é aberto e depois é editada na seção "Lojas" da página `/groups`. Loja sem cadastro aparece com o nome da nota e a
 categoria "Outros".
 
 A mesma mercadoria em duas filiais da mesma rede é um produto só: um produto é a raiz
@@ -183,7 +183,7 @@ precisa ser ativado uma vez por clone:
 git config core.hooksPath .githooks
 ```
 
-Lojas fora do `stores.json` geram um aviso no terminal e no log durante a importação.
+Lojas sem cadastro geram um aviso (uma vez por raiz de CNPJ) no terminal e no log durante a importação; cadastre nome e categoria na seção "Lojas" da página `/groups`.
 
 ## Planejado
 

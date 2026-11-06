@@ -19,7 +19,7 @@ class ImportCommandTest(unittest.TestCase):
             tmp = Path(tmp)
             code, out, _ = self.run_cli(
                 "import", str(tmp), "--db", str(tmp / "t.sqlite"),
-                "--stores", str(tmp / "stores.json"), "--log", str(tmp / "t.log"),
+                "--log", str(tmp / "t.log"),
             )
             self.assertEqual(code, 0)
             self.assertIn("0 novas, 0 já existentes, 0 com erro", out)
@@ -30,7 +30,7 @@ class ImportCommandTest(unittest.TestCase):
             tmp = Path(tmp)
             code, _, err = self.run_cli(
                 "import", str(tmp / "nada"), "--db", str(tmp / "t.sqlite"),
-                "--stores", str(tmp / "s.json"), "--log", str(tmp / "t.log"),
+                "--log", str(tmp / "t.log"),
             )
             self.assertEqual(code, 2)
             self.assertIn("pasta não encontrada", err)

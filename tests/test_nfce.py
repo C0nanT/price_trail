@@ -169,23 +169,6 @@ class SaveNoteTests(unittest.TestCase):
         self.assertEqual(row, ("2026-10-02", 4.89, 4.89))
 
 
-class StoresTests(unittest.TestCase):
-    def test_unknown_store(self):
-        self.assertTrue(importer.is_unknown_store("75315333029000", {"84683481"}))
-        self.assertFalse(importer.is_unknown_store("75315333029000", {"75315333"}))
-
-    def test_load_known_stores(self):
-        import json, tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "stores.json"
-            self.assertEqual(importer.load_known_stores(path), set())  # ausente
-            path.write_text("{ruim")
-            self.assertEqual(importer.load_known_stores(path), set())  # inválido
-            path.write_text(json.dumps({"75315333": {"store": "A", "category": "B"}}))
-            self.assertEqual(importer.load_known_stores(path), {"75315333"})
-
-
 class FindPdfsTests(unittest.TestCase):
     def test_recursive_and_case_insensitive(self):
         import tempfile

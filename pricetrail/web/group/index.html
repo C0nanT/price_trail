@@ -50,7 +50,16 @@
     <h2 id="h-groups">Grupos <small id="group-count"></small></h2>
     <ul id="groups" class="groups"></ul>
   </section>
+
+  <section class="panel wide" aria-labelledby="h-stores">
+    <h2 id="h-stores">Lojas <small id="stores-count"></small></h2>
+    <p id="stores-error" class="warn" role="alert" hidden></p>
+    <p class="hint">Sem cadastro, a loja usa o nome da nota e a categoria "Outros".</p>
+    <ul id="stores-missing" class="list"></ul>
+    <ul id="stores-known" class="list"></ul>
+  </section>
 </main>
 <script src="/static/group/app.js"></script>
+<script src="/static/group/stores.js"></script>
 </body>
 </html>

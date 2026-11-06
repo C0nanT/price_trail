@@ -7,4 +7,4 @@
 | [handoff-codigo-de-barras.md](handoff-codigo-de-barras.md) | Pausado |
 
 Já feito fora dos planos: página `group_page.py` (`pricetrail/web/group/`) para montar o `products.json`, testes do parser (`tests/`), hook `pre-push`, aviso de
-loja fora do `stores.json`.
+loja sem cadastro (agora cadastrada pela página `/groups`).
