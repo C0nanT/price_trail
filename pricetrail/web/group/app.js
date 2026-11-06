@@ -1,5 +1,4 @@
 "use strict";
-const STORAGE_KEY = "pricetrail-groups";
 const PRICE_RATIO_WARN = 1.5;
 
 const el = (id) => document.getElementById(id);
@@ -15,24 +14,39 @@ let byRef = new Map();
 let groups = {}; // nome -> [referências]
 let selected = new Set();
 let nameTouched = false;
-let dirty = false;
+let dirty = false; // há edição que o servidor ainda não confirmou
 
-// ---- persistência local (só conveniência; o arquivo é o products.json) ----
-let baseKey = "";
+// ---- gravação no banco ----
+let saving = Promise.resolve();
 
-function restoreDraft() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-    if (stored && stored.base === baseKey) {
-      groups = stored.groups;
-      dirty = true;
-    }
-  } catch { /* sem storage: segue sem restaurar */ }
-}
-
+// Cada edição manda o mapa inteiro; as gravações vão em fila para não se atropelarem.
 function persist() {
   dirty = true;
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ base: baseKey, groups })); } catch { /* ignora */ }
+  renderStatus();
+  saving = saving.then(saveGroups);
+  return saving;
+}
+
+async function saveGroups() {
+  if (!dirty) return;
+  const sent = JSON.stringify(groups);
+  try {
+    const response = await fetch("/api/groups", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: sent,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `a API respondeu ${response.status}`);
+    }
+    if (JSON.stringify(groups) === sent) dirty = false;
+    el("save-error").hidden = true;
+  } catch (error) {
+    el("save-error").textContent = `Não foi possível salvar (${error.message}). A edição continua na tela; corrija e tente de novo.`;
+    el("save-error").hidden = false;
+  }
+  renderStatus();
 }
 
 // ---- helpers ----
@@ -76,7 +90,7 @@ function flash(text) {
 }
 
 function renderStatus() {
-  el("status").textContent = dirty ? "Alterações ainda não exportadas" : "";
+  el("status").textContent = dirty ? "Alterações ainda não salvas" : "";
 }
 
 // ---- lista de produtos ----
@@ -223,52 +237,6 @@ function renderGroups() {
   }));
 }
 
-// ---- exportar ----
-const exportText = () => JSON.stringify(groups, null, 2) + "\n";
-
-function markExported() {
-  dirty = false;
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignora */ }
-  renderStatus();
-}
-
-el("download").addEventListener("click", () => {
-  const url = URL.createObjectURL(new Blob([exportText()], { type: "application/json" }));
-  const link = make("a", { href: url, download: "products.json" });
-  link.click();
-  URL.revokeObjectURL(url);
-  flash("Baixado. Mova para a pasta do projeto e rode chart.py");
-  markExported();
-});
-
-el("copy").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(exportText());
-    flash("JSON copiado");
-  } catch {
-    flash("Não consegui copiar; use Baixar");
-  }
-});
-
-if (window.showSaveFilePicker) {
-  el("save").hidden = false;
-  el("save").addEventListener("click", async () => {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: "products.json",
-        types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(exportText());
-      await writable.close();
-      flash("Salvo");
-      markExported();
-    } catch (error) {
-      if (error.name !== "AbortError") flash("Não consegui salvar; use Baixar");
-    }
-  });
-}
-
 window.addEventListener("beforeunload", (event) => {
   if (dirty) event.preventDefault();
 });
@@ -291,7 +259,6 @@ function applyCatalog(data) {
   ({ products, suggestions, notes } = data);
   byRef = new Map(products.map((p) => [p.ref, p]));
   groups = structuredClone(data.groups);
-  baseKey = JSON.stringify(data.groups);
 }
 
 // ---- ligação ----
@@ -317,7 +284,6 @@ async function start() {
     showError(error);
     return;
   }
-  restoreDraft();
   fillStores();
   renderAll();
 }

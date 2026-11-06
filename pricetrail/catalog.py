@@ -6,7 +6,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from .db import read_legacy_json
+from .db import CODE_REF_RE, read_legacy_json
 from .pdfs import resolve_in_data
 
 SIMILAR_RATIO = 0.88
@@ -231,6 +231,46 @@ def list_suggestions(rows: list[dict], rejected: set[str]) -> list[dict]:
         {"name": s["name"], "reason": s["reason"], "refs": s["refs"], "warnings": s["warnings"]}
         for s in drop_rejected(suggest_groups(rows), rejected)
     ]
+
+
+class GroupsError(ValueError):
+    """Grupos que violam as regras; a mensagem é mostrada ao usuário."""
+
+
+def validate_groups(pairs: list[tuple[str, object]]) -> list[tuple[str, list[str]]]:
+    """Confere nomes e referências e devolve (nome, refs) limpos; levanta GroupsError."""
+    result: list[tuple[str, list[str]]] = []
+    names: set[str] = set()
+    owner: dict[str, str] = {}
+    for raw_name, refs in pairs:
+        name = raw_name.strip()
+        if not name:
+            raise GroupsError("Todo grupo precisa de um nome.")
+        if name in names:
+            raise GroupsError(f"O nome “{name}” aparece em mais de um grupo.")
+        names.add(name)
+        if not isinstance(refs, list) or not refs:
+            raise GroupsError(f"O grupo “{name}” precisa de uma lista de produtos.")
+        for ref in refs:
+            if not isinstance(ref, str) or not CODE_REF_RE.match(ref):
+                raise GroupsError(f"“{ref}” no grupo “{name}” não é uma referência raiz:código.")
+            if owner.setdefault(ref, name) != name:
+                raise GroupsError(f"O produto {ref} está nos grupos “{owner[ref]}” e “{name}”.")
+        result.append((name, list(dict.fromkeys(refs))))
+    return result
+
+
+def replace_groups(conn: sqlite3.Connection, pairs: list[tuple[str, object]]) -> None:
+    """Troca todos os grupos numa transação: se algo falhar, nada muda."""
+    groups = validate_groups(pairs)
+    with conn:
+        conn.execute("DELETE FROM product_groups")  # group_refs sai junto, por cascata
+        for name, refs in groups:
+            group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
+            conn.executemany(
+                "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
+                [(group_id, *ref.split(":", 1)) for ref in refs],
+            )
 
 
 def list_groups(conn: sqlite3.Connection) -> dict[str, list[str]]:

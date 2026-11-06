@@ -146,10 +146,10 @@ abrir o PDF. O caminho de cada PDF fica no banco: se você renomear ou mover o a
 dentro de `data/`, rode a importação de novo e o link volta a funcionar. Use Ctrl+F no
 PDF para achar o item.
 
-Nela você marca produtos (ou clica numa sugestão), dá um nome, cria o grupo e
-exporta o `products.json` (Baixar, Copiar ou, no Chrome, Salvar direto). Dá para
-renomear, tirar produtos e excluir grupos. Por enquanto a página ainda não salva no
-banco, que só carrega o `products.json` na primeira abertura.
+Nela você marca produtos (ou clica numa sugestão), dá um nome e cria o grupo. Dá para
+renomear, tirar produtos e excluir grupos. Cada alteração é salva direto no banco
+(`PUT /api/groups`); se o servidor recusar, a página mostra o motivo e mantém a edição
+na tela. O gráfico reflete os grupos ao recarregar.
 
 Manualmente: copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
 ser tamanhos diferentes) e rode `python3 chart.py`. Cada referência é um código de
