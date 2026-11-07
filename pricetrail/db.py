@@ -117,6 +117,9 @@ def read_legacy_json(legacy_dir: Path | None, name: str) -> dict:
 
 def load_legacy_stores(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     stores = read_legacy_json(legacy_dir, "stores.json")
+    for root, entry in stores.items():
+        if not isinstance(entry, dict):
+            raise MigrationError(f'stores.json deve ser {{"raiz": {{"store": ..., "category": ...}}}}, veja {root!r}')
     conn.executemany(
         "INSERT INTO stores (cnpj_root, store, category) VALUES (?, ?, ?)",
         [(root, entry.get("store"), entry.get("category")) for root, entry in stores.items()],
@@ -129,7 +132,7 @@ def load_legacy_groups(conn: sqlite3.Connection, legacy_dir: Path | None) -> Non
             raise MigrationError(f'products.json deve ser {{"Nome": ["raiz:código", ...]}}, veja o grupo {name!r}')
         group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
         for ref in dict.fromkeys(refs):
-            match = CODE_REF_RE.match(ref)
+            match = CODE_REF_RE.match(ref) if isinstance(ref, str) else None
             if not match:
                 raise MigrationError(f"products.json: {ref!r} no grupo {name!r} não é uma referência raiz:código")
             try:

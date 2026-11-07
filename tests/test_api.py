@@ -172,6 +172,14 @@ class MigrationTests(ApiTestCase):
         self.write_legacy("products.json", {"A": "75315333:10"})
         self.assert_migration_fails("products.json")
 
+    def test_referencia_que_nao_e_texto_aborta(self):
+        self.write_legacy("products.json", {"A": [12345678]})
+        self.assert_migration_fails("12345678")
+
+    def test_loja_que_nao_e_objeto_aborta(self):
+        self.write_legacy("stores.json", {"75315333": "Atacadão"})
+        self.assert_migration_fails("stores.json")
+
 
 class HostTests(ApiTestCase):
     def test_aceita_localhost_e_127_0_0_1_com_ou_sem_porta(self):
