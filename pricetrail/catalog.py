@@ -12,6 +12,8 @@ from .db import canonical_pair, is_cnpj_root, parse_ref
 from .pdfs import resolve_in_data
 
 SIMILAR_RATIO = 0.88
+# Maior preço sobre o menor acima disso vira aviso; a página de grupos lê o valor da API.
+PRICE_RATIO_WARN = 1.5
 
 # Linhas repetidas de um produto na mesma nota e com o mesmo preço viram uma compra.
 PURCHASES_QUERY = """
@@ -128,7 +130,7 @@ def _warnings(members: list[dict]) -> list[str]:
     warnings = []
     if len({member["unit"] for member in members}) > 1:
         warnings.append("unidades diferentes")
-    if prices and max(prices) / min(prices) > 1.5:
+    if prices and max(prices) / min(prices) > PRICE_RATIO_WARN:
         warnings.append(f"preços muito diferentes ({min(prices):.2f} a {max(prices):.2f})")
     return warnings
 
@@ -390,6 +392,7 @@ def build_catalog(conn: sqlite3.Connection, data_dir: Path) -> dict:
         "groups": list_groups(conn),
         "notes": list_notes(conn, data_dir),
         "rejections": list_rejections(rejected),
+        "price_ratio_warn": PRICE_RATIO_WARN,
     }
 
 

@@ -23,6 +23,7 @@ class CatalogTests(ApiTestCase):
             }],
             "suggestions": [],
             "rejections": [],
+            "price_ratio_warn": 1.5,
             "groups": {"Detergente": [REF]},
             "notes": {REF: [{
                 "date": "2026-10-02", "number": 7, "file": "a.pdf", "href": note_url(7),
@@ -87,7 +88,8 @@ class CatalogTests(ApiTestCase):
         self.assertEqual(suggestion["refs"], ["75315333:1", "75315333:2"])
 
     def test_banco_vazio(self):
-        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": []})
+        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": [],
+                                          "price_ratio_warn": 1.5})
 
     def test_recusa_outro_host(self):
         response = self.client().get("/api/catalog", headers={"Host": "evil.example"})

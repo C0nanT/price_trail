@@ -1,5 +1,4 @@
 "use strict";
-const PRICE_RATIO_WARN = 1.5;
 
 const el = (id) => document.getElementById(id);
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -11,6 +10,7 @@ let suggestions = [];
 let notes = {};
 let rejections = []; // pares [ref, ref] marcados como "não juntar"
 let byRef = new Map();
+let priceRatioWarn = Infinity; // vem da API, a mesma regra dos avisos das sugestões
 
 let groups = {}; // nome -> [referências]
 let selected = new Set();
@@ -137,7 +137,7 @@ function draftWarnings(items) {
     warnings.push("Unidades diferentes: o gráfico não junta produtos com unidades diferentes.");
   }
   const prices = items.flatMap((p) => [p.min, p.max]);
-  if (prices.length && Math.max(...prices) / Math.min(...prices) > PRICE_RATIO_WARN) {
+  if (prices.length && Math.max(...prices) / Math.min(...prices) > priceRatioWarn) {
     warnings.push(`Preços muito diferentes (${money.format(Math.min(...prices))} a ${money.format(Math.max(...prices))}): pode ser tamanho ou sabor distinto.`);
   }
   return warnings;
@@ -291,6 +291,7 @@ function showError(error) {
 function applyCatalog(data) {
   ({ products, suggestions, notes } = data);
   rejections = data.rejections ?? [];
+  priceRatioWarn = data.price_ratio_warn;
   byRef = new Map(products.map((p) => [p.ref, p]));
   groups = structuredClone(data.groups);
 }
