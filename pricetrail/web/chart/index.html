@@ -17,27 +17,27 @@
 <main class="page">
   <h1 class="mb-4 text-2xl font-bold leading-tight">Histórico de preços</h1>
   <div class="grid gap-3 md:grid-cols-2">
-    <label class="grid gap-1 text-sm text-muted">Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></label>
-    <label class="grid gap-1 text-sm text-muted">Produto <select id="product" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></select></label>
+    <label class="grid gap-1 text-sm text-muted">Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off" class="field"></label>
+    <label class="grid gap-1 text-sm text-muted">Produto <select id="product" class="field"></select></label>
   </div>
-  <details id="filters" class="mt-3 rounded-lg border border-line md:border-0 [&_summary::-webkit-details-marker]:hidden">
+  <details id="filters" open class="md:[&::details-content]:![content-visibility:visible] mt-3 rounded-lg border border-line md:border-0 [&_summary::-webkit-details-marker]:hidden">
     <summary class="flex min-h-touch cursor-pointer list-none items-center justify-between px-3 font-semibold md:hidden">
       <span>Filtros</span>
       <span id="filter-count" class="badge bg-raised text-muted" aria-live="polite">0 ativos</span>
     </summary>
     <div class="grid gap-3 border-t border-line p-3 sm:grid-cols-2 md:grid-cols-3 md:border-0 md:px-0 md:pb-0">
-      <label class="grid gap-1 text-sm text-muted">Categoria <select id="category" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></select></label>
-      <label class="grid gap-1 text-sm text-muted">Estabelecimento <select id="store" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></select></label>
+      <label class="grid gap-1 text-sm text-muted">Categoria <select id="category" class="field"></select></label>
+      <label class="grid gap-1 text-sm text-muted">Estabelecimento <select id="store" class="field"></select></label>
       <label class="grid gap-1 text-sm text-muted">Ordenar por
-        <select id="sort" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink">
+        <select id="sort" class="field">
           <option value="purchases">Mais compras</option>
           <option value="name">Nome</option>
           <option value="rise">Maior alta</option>
           <option value="drop">Maior queda</option>
         </select>
       </label>
-      <label class="grid gap-1 text-sm text-muted">De <input id="from" type="date" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></label>
-      <label class="grid gap-1 text-sm text-muted">Até <input id="to" type="date" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></label>
+      <label class="grid gap-1 text-sm text-muted">De <input id="from" type="date" class="field"></label>
+      <label class="grid gap-1 text-sm text-muted">Até <input id="to" type="date" class="field"></label>
     </div>
   </details>
   <section id="details" class="mt-6" hidden>
@@ -46,7 +46,7 @@
     <p class="variation mt-1 text-sm font-semibold tabular-nums [&.up]:text-up [&.down]:text-down [&.flat]:text-muted [&_small]:font-normal [&_small]:text-muted" id="variation"></p>
     <div class="my-4 grid grid-cols-2 items-end gap-3 rounded-lg border border-line bg-raised p-3 md:grid-cols-[auto_12rem_1fr] md:gap-5">
       <div class="text-sm text-muted">Média dos preços <strong id="average" class="block text-2xl text-ink tabular-nums"></strong></div>
-      <label class="grid gap-1 text-sm text-muted">Preço atual (R$) <input id="current" inputmode="decimal" placeholder="Ex.: 7,99" autocomplete="off" class="min-h-touch w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"></label>
+      <label class="grid gap-1 text-sm text-muted">Preço atual (R$) <input id="current" inputmode="decimal" placeholder="Ex.: 7,99" autocomplete="off" class="field"></label>
       <div id="verdict" aria-live="polite" class="col-span-2 min-w-0 text-lg font-bold md:col-span-1 [&_small]:block [&_small]:text-sm [&_small]:font-normal [&_small]:text-muted"></div>
     </div>
     <div id="chart" class="relative h-72 touch-pan-y md:h-80"><div id="tooltip" hidden><strong></strong><span></span><span></span></div></div>

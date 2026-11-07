@@ -44,13 +44,16 @@ class PagesTest(ApiTestCase):
         finally:
             response.close()
 
-    def test_import_tem_nav_com_as_tres_paginas_e_marca_a_atual(self):
-        body = self.html("/import")
+    def assert_nav(self, body, current):
         nav = body[body.index("<nav"):body.index("</nav>")]
         for target in ('href="/"', 'href="/groups"', 'href="/import"'):
             self.assertIn(target, nav)
         self.assertEqual(nav.count('aria-current="page"'), 1)
-        self.assertRegex(nav, r'href="/import"[^>]*aria-current="page"|aria-current="page"[^>]*href="/import"')
+        self.assertRegex(nav, rf'href="{current}"[^>]*aria-current="page"|aria-current="page"[^>]*href="{current}"')
+
+    def test_import_tem_nav_com_as_tres_paginas_e_marca_a_atual(self):
+        body = self.html("/import")
+        self.assert_nav(body, "/import")
 
 
     def test_grafico_tem_viewport_css_unico_e_nav_com_o_grafico_marcado(self):
@@ -58,11 +61,7 @@ class PagesTest(ApiTestCase):
         self.assertIn('name="viewport"', body)
         self.assertIn('href="/static/app.css"', body)
         self.assertNotIn("/static/chart/style.css", body)
-        nav = body[body.index("<nav"):body.index("</nav>")]
-        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
-            self.assertIn(target, nav)
-        self.assertEqual(nav.count('aria-current="page"'), 1)
-        self.assertRegex(nav, r'href="/"[^>]*aria-current="page"|aria-current="page"[^>]*href="/"')
+        self.assert_nav(body, "/")
 
     def test_grafico_deixa_busca_e_produto_fora_do_painel_de_filtros(self):
         body = self.html("/")
@@ -85,11 +84,7 @@ class PagesTest(ApiTestCase):
         self.assertIn('name="viewport"', body)
         self.assertIn('href="/static/app.css"', body)
         self.assertNotIn("/static/group/style.css", body)
-        nav = body[body.index("<nav"):body.index("</nav>")]
-        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
-            self.assertIn(target, nav)
-        self.assertEqual(nav.count('aria-current="page"'), 1)
-        self.assertRegex(nav, r'href="/groups"[^>]*aria-current="page"|aria-current="page"[^>]*href="/groups"')
+        self.assert_nav(body, "/groups")
 
     def test_groups_tem_ancoras_das_secoes_e_barra_de_criar_grupo(self):
         body = self.html("/groups")

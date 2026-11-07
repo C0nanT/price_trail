@@ -14,7 +14,7 @@
     <a href="/import" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Importar</a>
   </div>
 </nav>
-<main class="page md:max-w-6xl pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-24">
+<main class="page md:max-w-6xl pb-[calc(var(--nav-h)+var(--bar-h)+1.5rem)] md:pb-24">
   <h1 class="mb-3 text-2xl font-bold leading-tight">Agrupar produtos</h1>
 
   <p id="error" class="alert mb-3" role="alert" hidden></p>
@@ -33,10 +33,10 @@
       <h2 id="h-products" class="mb-2 text-lg font-bold">Produtos <small id="count" class="text-sm font-normal text-muted"></small></h2>
       <div class="mb-3 grid gap-3">
         <label class="grid gap-1 text-sm text-muted">Buscar
-          <input id="search" type="search" placeholder="Ex.: detergente" autocomplete="off" class="min-h-touch w-full rounded-lg border border-muted bg-surface px-3 text-base text-ink">
+          <input id="search" type="search" placeholder="Ex.: detergente" autocomplete="off" class="field">
         </label>
         <label class="grid gap-1 text-sm text-muted">Loja
-          <select id="store" class="min-h-touch w-full rounded-lg border border-muted bg-surface px-3 text-base text-ink"></select>
+          <select id="store" class="field"></select>
         </label>
         <label class="flex min-h-touch cursor-pointer items-center gap-3 text-ink">
           <input id="ungrouped" type="checkbox" checked class="h-6 w-6 shrink-0 accent-accent"> Só sem grupo
@@ -51,7 +51,7 @@
       <ul id="draft" class="mb-3 divide-y divide-line overflow-hidden rounded-lg border border-line empty:hidden"></ul>
       <p id="draft-warn" class="alert mb-3 text-sm" hidden></p>
       <label class="grid gap-1 text-sm text-muted">Nome do grupo
-        <input id="name" autocomplete="off" placeholder="Ex.: Detergente Ypê" class="min-h-touch w-full rounded-lg border border-muted bg-surface px-3 text-base text-ink">
+        <input id="name" autocomplete="off" placeholder="Ex.: Detergente Ypê" class="field">
       </label>
 
       <h2 id="h-suggestions" class="mb-2 mt-8 scroll-mt-16 text-lg font-bold md:scroll-mt-4">Sugestões <small id="sug-count" class="text-sm font-normal text-muted"></small></h2>
@@ -78,9 +78,9 @@
   </div>
 </main>
 
-<p id="status" role="status" aria-live="polite" class="fixed inset-x-4 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-md rounded-lg bg-ink px-3 py-2 text-center text-sm font-semibold text-surface empty:hidden md:bottom-20"></p>
+<p id="status" role="status" aria-live="polite" class="fixed inset-x-4 bottom-[calc(var(--nav-h)+var(--bar-h)+0.5rem)] z-20 mx-auto max-w-md rounded-lg bg-ink px-3 py-2 text-center text-sm font-semibold text-surface empty:hidden md:bottom-20"></p>
 
-<div id="selection-bar" hidden class="fixed inset-x-0 bottom-[calc(2.85rem+env(safe-area-inset-bottom))] z-10 border-t border-line bg-surface md:bottom-0">
+<div id="selection-bar" hidden class="fixed inset-x-0 bottom-[var(--nav-h)] z-10 border-t border-line bg-surface md:bottom-0">
   <div class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
     <p id="selection-count" class="mr-auto text-sm font-semibold" aria-live="polite"></p>
     <button id="clear" type="button" class="btn">Limpar</button>

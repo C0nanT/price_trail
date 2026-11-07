@@ -2,7 +2,7 @@
 // Seção "Lojas": cadastro de nome e categoria por raiz de CNPJ (GET /api/stores, PUT /api/stores/<raiz>).
 // Independente do restante da página: usa só `make` de app.js e `el` e `fetchJson` de common.js.
 
-const INPUT = "min-h-touch w-full min-w-0 md:w-auto md:flex-1 md:basis-44 rounded-lg border border-muted bg-surface px-3 text-base text-ink";
+const INPUT = "field md:w-auto md:flex-1 md:basis-44";
 
 function storeRow(root, name, store, category, hint) {
   const nameInput = make("input", { className: INPUT, value: store, placeholder: name, "aria-label": `Nome da loja ${root}` });

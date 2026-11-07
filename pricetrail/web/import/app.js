@@ -39,7 +39,7 @@ function showResult({ results, summary }) {
     name.className = "font-semibold [overflow-wrap:anywhere]";
     name.textContent = result.name;
     const badge = document.createElement("span");
-    badge.className = `badge shrink-0 ${BADGE_CLASS[result.status] || BADGE_CLASS.NOVA}`;
+    badge.className = `badge shrink-0 ${BADGE_CLASS[result.status] || "border border-line text-muted"}`;
     badge.textContent = result.status;
     head.append(name, badge);
     const text = document.createElement("p");

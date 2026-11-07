@@ -17,6 +17,9 @@
     --up: #b3261e;
     --down: #1b7a3a;
     --ok: #1b7a3a;
+    /* Altura da barra de navegação fixa (mobile): 44px + borda + área segura. Barra de seleção, aviso e respiro da página partem dela. */
+    --nav-h: calc(45px + env(safe-area-inset-bottom));
+    --bar-h: 62px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -41,11 +44,12 @@
 
 @layer components {
   /* Espaço para a barra inferior fixa (mobile), com a área segura do iOS. */
-  .page { @apply mx-auto max-w-4xl px-4 pt-5 md:pt-6; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  .page { @apply mx-auto max-w-4xl px-4 pt-5 md:pt-6; padding-bottom: calc(var(--nav-h) + 2rem); }
   @media (min-width: 768px) { .page { padding-bottom: 3rem; } }
   .btn { @apply inline-flex min-h-touch items-center justify-center rounded-lg border border-line bg-raised px-4 font-semibold text-ink; }
   .btn-primary { @apply border-accent bg-accent text-accent-ink; }
   .btn:disabled { @apply cursor-wait opacity-60; }
+  .field { @apply min-h-touch w-full min-w-0 rounded-lg border border-muted bg-surface px-3 text-base text-ink; }
   .alert { @apply rounded-lg bg-warn-bg px-3 py-2 text-warn; }
   .badge { @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold; }
 }

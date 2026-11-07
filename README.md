@@ -187,7 +187,8 @@ Os PDFs não entram no repositório; guarde-os à parte.
 
 O visual vem de um único CSS, `pricetrail/web/app.css`, gerado pelo Tailwind e
 commitado (rodar o servidor não precisa do Tailwind). Só quem muda classes nos
-HTMLs/JS de `pricetrail/web/` precisa regerar. Usamos a CLI standalone do
+HTMLs/JS de `pricetrail/web/` precisa regerar (as classes também ficam em
+strings dos JS, então editar classes no JS também exige `make css`). Usamos a CLI standalone do
 Tailwind **v3.4.17** (sem Node). Baixe o binário para `bin/tailwindcss`
 (ignorado pelo git):
 

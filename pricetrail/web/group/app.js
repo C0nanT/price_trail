@@ -60,6 +60,7 @@ const metaText = (p) =>
 // Classes Tailwind dos elementos que o JS cria (o build lê este arquivo).
 const META = "text-sm text-muted tabular-nums";
 const SMALL_BTN = "btn min-h-touch px-3 text-sm";
+const DANGER_BTN = `${SMALL_BTN} border-up text-up`;
 
 const qtyFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 
@@ -142,7 +143,7 @@ function renderDraft() {
   const items = [...selected].map((ref) => byRef.get(ref)).filter(Boolean);
   el("draft-hint").hidden = items.length > 0;
   el("draft").replaceChildren(...items.map((p) => {
-    const remove = make("button", { className: SMALL_BTN, type: "button", textContent: "tirar" });
+    const remove = make("button", { className: DANGER_BTN, type: "button", textContent: "tirar" });
     remove.addEventListener("click", () => toggle(p.ref, false));
     return make("li", {},
       make("div", { className: "flex items-start gap-3 p-3" },
@@ -188,7 +189,7 @@ function renderSuggestions() {
       renderProducts();
       el("name").focus();
     });
-    const reject = make("button", { className: SMALL_BTN, type: "button", textContent: "Não juntar" });
+    const reject = make("button", { className: DANGER_BTN, type: "button", textContent: "Não juntar" });
     reject.addEventListener("click", () => sendRejections("POST", s.refs));
     const head = make("div", { className: "flex flex-wrap items-center gap-2" }, make("strong", { className: "mr-auto min-w-0 break-words", textContent: s.name }), pick, reject);
     const meta = make("div", { className: `mt-1 ${META}` }, `${free.length} produtos · ${s.reason} · cód. ${free.map((r) => r.split(":")[1]).join(", ")} `);
@@ -236,9 +237,9 @@ function renderGroups() {
   const names = Object.keys(groups);
   el("group-count").textContent = `${names.length}`;
   el("groups").replaceChildren(...names.map((name) => {
-    const nameInput = make("input", { className: "min-h-touch min-w-0 flex-1 rounded-lg border border-muted bg-surface px-3 text-base font-semibold text-ink", value: name, "aria-label": "Nome do grupo" });
+    const nameInput = make("input", { className: "field flex-1 font-semibold", value: name, "aria-label": "Nome do grupo" });
     nameInput.addEventListener("change", () => renameGroup(name, nameInput));
-    const del = make("button", { className: `${SMALL_BTN} border-up text-up`, type: "button", textContent: "Excluir grupo" });
+    const del = make("button", { className: DANGER_BTN, type: "button", textContent: "Excluir grupo" });
     del.addEventListener("click", () => {
       if (!confirm(`Excluir o grupo “${name}”? Os produtos voltam a aparecer separados.`)) return;
       delete groups[name];
@@ -247,7 +248,7 @@ function renderGroups() {
     });
     const members = groups[name].map((ref) => {
       const p = byRef.get(ref);
-      const remove = make("button", { className: SMALL_BTN, type: "button", textContent: "tirar" });
+      const remove = make("button", { className: DANGER_BTN, type: "button", textContent: "tirar" });
       remove.addEventListener("click", () => {
         groups[name] = groups[name].filter((r) => r !== ref);
         if (!groups[name].length) delete groups[name];
