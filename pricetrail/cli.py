@@ -7,6 +7,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .auth import AuthConfigError, hash_password
+from .backup import BackupError, keep_from_env, run_backup
 from .catalog import CurationFileError, export_curation, restore_curation
 from .db import MigrationError, connect
 from .importer import import_folder
@@ -44,6 +45,16 @@ def hash_password_command() -> int:
         print("as senhas não conferem: nada foi gerado", file=sys.stderr)
         return 2
     print(hash_password(password))
+    return 0
+
+
+def backup_command(db: Path) -> int:
+    configure_server_logging()
+    try:
+        run_backup(db, keep_from_env())
+    except BackupError as error:
+        print(f"backup falhou: {error}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -97,12 +108,17 @@ def main(argv: list[str] | None = None) -> int:
     restaurar.add_argument("file", nargs="?", type=Path, default=PROJECT_DIR / CURATION_FILE,
                            help=f"arquivo a ler (padrão: {CURATION_FILE})")
 
+    commands.add_parser("backup", parents=[paths],
+                        help="copia o banco para backups/ (VACUUM INTO) e mantém os BACKUP_KEEP mais novos")
+
     commands.add_parser("hash-password", help="pede uma senha e imprime o hash argon2 para AUTH_PASSWORD_HASH")
 
     args = parser.parse_args(argv)
     try:
         if args.command == "hash-password":
             return hash_password_command()
+        if args.command == "backup":
+            return backup_command(args.db)
         if args.command == "import":
             return import_folder(args.folder or args.data, args.db, args.log, args.data, PROJECT_DIR)
         if args.command == "serve":

@@ -183,6 +183,38 @@ Para recriar o banco do zero (outra máquina, ou banco perdido):
 
 Os PDFs não entram no repositório; guarde-os à parte.
 
+### Backup do banco em produção (Docker)
+
+`python -m pricetrail backup` faz `VACUUM INTO` com o app rodando (nunca copia o arquivo, que tem
+`-wal`/`-shm`) e grava `/data/backups/app-AAAAMMDD-HHMMSS.db`. Mantém os `BACKUP_KEEP` mais novos
+(padrão 14, definido no `.env`) e loga uma linha JSON com nome, tamanho, quantos apagou e duração.
+Roda como o usuário da imagem, com `read_only`: só `/data` é gravável.
+
+Cron da VPS (`crontab -e`), todo dia às 03:15:
+
+```
+15 3 * * * cd /opt/apps/price_trail && docker compose exec -T web python -m pricetrail backup >> /var/log/price_trail-backup.log 2>&1
+```
+
+Para testar à mão, rode o mesmo comando sem o `>>` e confira o arquivo:
+`docker compose exec -T web ls -l /data/backups`.
+
+Restaurar um backup (o volume é `price_trail_data`; troque `app-AAAAMMDD-HHMMSS.db` pelo arquivo escolhido):
+
+```bash
+cd /opt/apps/price_trail
+docker compose stop web
+docker compose run --rm --no-deps --user root --entrypoint sh web -c \
+  'cp /data/backups/app-AAAAMMDD-HHMMSS.db /data/app.db \
+   && rm -f /data/app.db-wal /data/app.db-shm \
+   && chown 10001:10001 /data/app.db'
+docker compose up -d
+```
+
+O `-wal`/`-shm` antigo precisa sumir: misturado com o `app.db` restaurado, corrompe o banco.
+Os backups ficam no mesmo volume do banco; para proteção contra perda do disco, copie
+`/data/backups` para outro lugar (o `docker cp` ou `rsync` do volume).
+
 ## Estilo (Tailwind)
 
 O visual vem de um único CSS, `pricetrail/web/app.css`, gerado pelo Tailwind e
