@@ -46,10 +46,23 @@ class PagesTest(ApiTestCase):
 
     def assert_nav(self, body, current):
         nav = body[body.index("<nav"):body.index("</nav>")]
-        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
+        for target in ('href="/"', 'href="/groups"', 'href="/import"', 'href="/lista"'):
             self.assertIn(target, nav)
         self.assertEqual(nav.count('aria-current="page"'), 1)
         self.assertRegex(nav, rf'href="{current}"[^>]*aria-current="page"|aria-current="page"[^>]*href="{current}"')
+
+    def test_lista_tem_viewport_css_unico_nav_e_script_servido(self):
+        body = self.html("/lista")
+        self.assertIn('name="viewport"', body)
+        self.assertIn('href="/static/app.css"', body)
+        self.assert_nav(body, "/lista")
+        for hook in ('id="progress"', 'id="reset"', 'id="sections"'):
+            self.assertIn(hook, body)
+        response = self.client().get("/static/lista/app.js")
+        try:
+            self.assertEqual(response.status_code, 200)
+        finally:
+            response.close()
 
     def test_import_tem_nav_com_as_tres_paginas_e_marca_a_atual(self):
         body = self.html("/import")

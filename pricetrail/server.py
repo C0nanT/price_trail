@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, abort, g, jsonify, request, send_file
 
-from . import catalog, importer
+from . import catalog, importer, shopping
 from .db import connect
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -63,6 +63,14 @@ def create_app(
     @app.get("/groups")
     def group_page():
         return app.send_static_file("group/index.html")
+
+    @app.get("/lista")
+    def shopping_list_page():
+        return app.send_static_file("lista/index.html")
+
+    @app.get("/api/shopping-list")
+    def shopping_list():
+        return jsonify(shopping.build_list(db()))
 
     @app.get("/api/products")
     def products():
