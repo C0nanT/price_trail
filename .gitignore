@@ -1,9 +1,6 @@
 data/*
 *.sqlite
-chart.html
 *.log
 __pycache__/
-products.suggested.json
-group_page/
 *.sqlite-wal
 *.sqlite-shm

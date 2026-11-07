@@ -275,7 +275,6 @@ window.addEventListener("beforeunload", (event) => {
 
 // ---- carga ----
 async function loadCatalog() {
-  if (window.DATA) return window.DATA; // página gerada pelo group_page.py, até ele sair
   const response = await fetch("/api/catalog");
   if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
   return response.json();

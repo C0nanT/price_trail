@@ -1,9 +1,9 @@
 # Plano: normalização de produtos
 
 Status: **implementado na variante manual (B)**. Nada é agrupado automaticamente:
-`suggest_products.py` lista candidatos, você copia os aprovados para `products.json`
-e `chart.py` aplica. Não foram criadas tabelas `products`/`product_aliases` no banco;
-o agrupamento vive só no `products.json` e na geração do gráfico. Junção automática
+o servidor sugere candidatos, você aprova na página `/groups` e os grupos ficam no banco
+(tabelas de grupos e de pares rejeitados). Os antigos `suggest_products.py`, `chart.py` e
+`products.json` foram removidos; o texto abaixo é o plano original. Junção automática
 (com faixa de preço/unidade) e código de barras seguem como evolução possível.
 
 Plano original:
