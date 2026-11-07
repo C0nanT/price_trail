@@ -1,8 +1,5 @@
 "use strict";
-
-const el = (id) => document.getElementById(id);
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const normalize = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+// el, money, dateFormat, normalize, fetchJson e showError vêm de /static/common.js.
 
 // Dados de GET /api/catalog; applyCatalog os troca de uma vez.
 let products = [];
@@ -32,15 +29,8 @@ async function saveGroups() {
   if (!dirty) return;
   const sent = JSON.stringify(groups);
   try {
-    const response = await fetch("/api/groups", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: sent,
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || `a API respondeu ${response.status}`);
-    }
+    // fetchJson serializa antes do primeiro await: o corpo enviado é igual a sent.
+    await fetchJson("/api/groups", { method: "PUT", body: groups });
     if (JSON.stringify(groups) === sent) dirty = false;
     el("save-error").hidden = true;
   } catch (error) {
@@ -67,7 +57,6 @@ const priceText = (p) => (p.min === p.max ? money.format(p.min) : `${money.forma
 const metaText = (p) =>
   `${p.store} · cód. ${p.code} · ${p.unit} · ${p.purchases} ${p.purchases === 1 ? "compra" : "compras"} · ${priceText(p)}`;
 
-const dateFormat = new Intl.DateTimeFormat("pt-BR");
 const qtyFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 
 // "Notas (N)": abre a lista de notas onde o produto aparece, cada uma com link para o PDF.
@@ -204,13 +193,7 @@ function renderSuggestions() {
 // Cada chamada devolve o catálogo atualizado; as seleções e os grupos em edição ficam como estão.
 async function sendRejections(method, refs) {
   try {
-    const response = await fetch("/api/rejections", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(refs),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `a API respondeu ${response.status}`);
+    const data = await fetchJson("/api/rejections", { method, body: refs });
     ({ suggestions, rejections = [] } = data);
     renderSuggestions();
     renderRejections();
@@ -276,18 +259,6 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 // ---- carga ----
-async function loadCatalog() {
-  const response = await fetch("/api/catalog");
-  if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
-  return response.json();
-}
-
-function showError(error) {
-  el("error").textContent = `Não foi possível carregar os produtos (${error.message}). `
-    + "Confira se o servidor está rodando e recarregue a página.";
-  el("error").hidden = false;
-}
-
 function applyCatalog(data) {
   ({ products, suggestions, notes } = data);
   rejections = data.rejections ?? [];
@@ -315,9 +286,9 @@ el("clear").addEventListener("click", () => { selected = new Set(); nameTouched 
 
 async function start() {
   try {
-    applyCatalog(await loadCatalog());
+    applyCatalog(await fetchJson("/api/catalog"));
   } catch (error) {
-    showError(error);
+    showError("os produtos", error);
     return;
   }
   fillStores();

@@ -245,7 +245,9 @@ class ChartPageTests(ApiTestCase):
         self.assertIn("Histórico de preços", html)
         self.assertNotIn("PRODUTO QUE NAO VAI NO HTML", html)
         script = client.get("/static/chart/app.js").get_data(as_text=True)
-        self.assertIn('fetch("/api/products")', script)
+        self.assertIn('fetchJson("/api/products")', script)
+        self.assertIn('src="/static/common.js"', html)
+        self.assertIn("async function fetchJson", client.get("/static/common.js").get_data(as_text=True))
         self.assertEqual(client.get("/static/chart/style.css").status_code, 200)
 
     def test_pagina_tem_link_para_o_agrupamento(self):
@@ -263,7 +265,8 @@ class GroupPageTests(ApiTestCase):
         self.assertNotIn("PRODUTO QUE NAO VAI NO HTML", html)
         self.assertNotIn("data.js", html)
         script = client.get("/static/group/app.js").get_data(as_text=True)
-        self.assertIn('fetch("/api/catalog")', script)
+        self.assertIn('fetchJson("/api/catalog")', script)
+        self.assertIn('src="/static/common.js"', html)
         self.assertEqual(client.get("/static/group/style.css").status_code, 200)
 
     def test_pagina_tem_link_para_o_grafico_e_area_de_erro(self):
