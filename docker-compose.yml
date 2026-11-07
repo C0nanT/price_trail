@@ -1,0 +1,61 @@
+# Compose de produção, atrás da borda Traefik compartilhada (traefik-default).
+# Na VPS fica em /opt/apps/price_trail/docker-compose.yml, ao lado do `.env`
+# (nunca versionado; modelo em .env.example). O cron da VPS faz `pull` + `up -d`.
+# O desenvolvimento local continua com `make serve`.
+
+# Fixo para o volume ser sempre `price_trail_data` e o rótulo `projeto` no Loki
+# não depender do nome da pasta.
+name: price_trail
+
+services:
+  web:
+    # Imagem privada publicada pelo CI; a VPS nunca compila. Precisa de
+    # `docker login ghcr.io` (token read:packages) uma vez. Para voltar uma
+    # versão, fixe IMAGE_TAG no .env com o SHA do commit.
+    image: ghcr.io/c0nant/price_trail:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    # Nenhuma porta publicada no host: todo tráfego entra pela Cloudflare e pelo Traefik.
+    expose:
+      - "8000"
+    volumes:
+      # Banco (/data/app.db, com -wal/-shm), PDFs (/data/pdfs) e backups
+      # (/data/backups): sobrevive a down/up e à troca de imagem. Disco local,
+      # nunca NFS, e uma réplica só.
+      - data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    # Estimativa: gunicorn (1 worker gthread) + Flask em uns 60–90 MB, com picos
+    # no upload de 20 MB de PDFs com pdftotext. Regra da casa: depois de medir o
+    # uso estável na VPS (`docker stats`), ajustar para ≥ uso / 0,7.
+    mem_limit: 256m
+    # Healthcheck: herdado do HEALTHCHECK do Dockerfile (GET /health em
+    # 127.0.0.1:8000, que abre o SQLite e roda SELECT 1), fonte única; não se
+    # repete aqui.
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      # Certificado: o curinga *.conantorres.dev já emitido pelo le-dns cobre
+      # este subdomínio, então não há emissão nova nem domínios declarados aqui.
+      - "traefik.http.routers.price_trail.rule=Host(`compras.conantorres.dev`)"
+      - "traefik.http.routers.price_trail.entrypoints=websecure"
+      - "traefik.http.routers.price_trail.middlewares=so-cloudflare@file,limite-taxa@file,seguranca@file,compressao@file"
+      - "traefik.http.routers.price_trail.tls.certresolver=le-dns"
+      - "traefik.http.services.price_trail.loadbalancer.server.port=8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  data:

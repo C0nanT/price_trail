@@ -1,0 +1,27 @@
+# Nada de dados de compras, segredos ou ferramentas de desenvolvimento na imagem.
+.git
+.github
+.env
+.env.*
+!.env.example
+__pycache__
+**/__pycache__
+.venv
+*.db*
+**/*.db*
+*.sqlite*
+**/*.sqlite*
+*.log
+**/*.log
+data/
+img/
+bin/
+tests/
+docs/
+.scratch/
+.claude/
+.githooks/
+tailwind/
+tailwind.config.js
+curadoria.json
+README.md

@@ -40,6 +40,14 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
     def too_large(_error):
         return jsonify(error=f"Envio acima de {MAX_UPLOAD_MB} MB: envie menos arquivos de cada vez."), 413
 
+    @app.errorhandler(sqlite3.OperationalError)
+    def database_busy(error: sqlite3.OperationalError):
+        """Outra conexão segurou a escrita além do busy_timeout: 503 em vez de 500 com traceback."""
+        if "database is locked" not in str(error):
+            raise error
+        logging.getLogger("pricetrail").warning("banco ocupado: database is locked", extra={"path": request.path})
+        return jsonify(error="Banco ocupado, tente de novo."), 503
+
     def db() -> sqlite3.Connection:
         """Uma conexão por request: o servidor atende em várias threads."""
         if "db" not in g:
