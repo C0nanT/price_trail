@@ -11,6 +11,9 @@ const fromInput = el("from");
 const toInput = el("to");
 const sortSelect = el("sort");
 const ALL = "";
+const filtersPanel = el("filters");
+const filterCount = el("filter-count");
+const wide = window.matchMedia("(min-width: 768px)");
 const chart = el("chart");
 const tooltip = el("tooltip");
 
@@ -94,7 +97,17 @@ function sortMatches(entries) {
   return entries;
 }
 
+// Filtros fora do padrão (os de dentro do painel recolhível).
+function updateFilterCount() {
+  const active = [categorySelect, storeSelect, fromInput, toInput].filter((input) => input.value).length
+    + (sortSelect.value === "purchases" ? 0 : 1);
+  filterCount.textContent = `${active} ${active === 1 ? "ativo" : "ativos"}`;
+  filterCount.classList.toggle("bg-accent", active > 0);
+  filterCount.classList.toggle("text-accent-ink", active > 0);
+}
+
 function fillOptions() {
+  updateFilterCount();
   const terms = normalize(search.value).split(/\s+/).filter(Boolean);
   const range = dateRange();
   const entries = [];
@@ -133,6 +146,7 @@ function renderCheck(product) {
   const current = currentPrice();
   el("average").textContent = money.format(average);
   const verdict = el("verdict");
+  verdict.classList.remove("text-up", "text-down", "text-ink");
   if (current === null) {
     verdict.textContent = "";
     return;
@@ -141,6 +155,7 @@ function renderCheck(product) {
   const percent = percentFormat.format(Math.abs(diff));
   const text = Math.abs(diff) <= NEAR_AVERAGE ? "≈ Preço na média"
     : diff < 0 ? "▼ Barato" : "▲ Caro";
+  verdict.classList.add(Math.abs(diff) <= NEAR_AVERAGE ? "text-ink" : diff < 0 ? "text-down" : "text-up");
   const detail = Math.abs(diff) <= NEAR_AVERAGE
     ? `${percent} ${diff < 0 ? "abaixo" : "acima"} da média`
     : `${percent} ${diff < 0 ? "abaixo" : "acima"} da média de ${money.format(average)}`;
@@ -148,21 +163,39 @@ function renderCheck(product) {
 }
 
 function renderTable(product) {
-  el("rows").replaceChildren(...[...product.purchases].reverse().map((purchase) => {
+  const purchases = [...product.purchases].reverse();
+  el("rows").replaceChildren(...purchases.map((purchase) => {
     const row = document.createElement("tr");
     const cells = [
       [dateFormat.format(purchase.date), ""],
       [purchase.seller, ""],
-      [money.format(purchase.price), "number"],
-      [`${quantityFormat.format(purchase.quantity)} ${product.unit}`, "number"],
-      [money.format(purchase.total), "number"],
+      [money.format(purchase.price), "text-right tabular-nums"],
+      [`${quantityFormat.format(purchase.quantity)} ${product.unit}`, "text-right tabular-nums"],
+      [money.format(purchase.total), "text-right tabular-nums"],
     ];
-    for (const [text, className] of cells) {
+    cells.forEach(([text, className], index) => {
       const cell = row.insertCell();
       cell.textContent = text;
-      cell.className = className;
-    }
+      cell.className = `border-b border-line py-2 ${index < 4 ? "pr-3" : ""} ${className}`;
+    });
     return row;
+  }));
+  // No celular, cada compra vira um cartão (nenhuma coluna some).
+  el("cards").replaceChildren(...purchases.map((purchase) => {
+    const card = document.createElement("li");
+    card.className = "rounded-lg border border-line bg-raised p-3";
+    const top = document.createElement("div");
+    top.className = "flex items-baseline justify-between gap-2";
+    const date = Object.assign(document.createElement("span"), { textContent: dateFormat.format(purchase.date), className: "text-sm text-muted" });
+    const price = Object.assign(document.createElement("strong"), { textContent: money.format(purchase.price), className: "text-lg tabular-nums" });
+    top.append(date, price);
+    const store = Object.assign(document.createElement("p"), { textContent: purchase.seller, className: "break-words" });
+    const detail = Object.assign(document.createElement("p"), {
+      textContent: `${quantityFormat.format(purchase.quantity)} ${product.unit} · total ${money.format(purchase.total)}`,
+      className: "text-sm text-muted tabular-nums",
+    });
+    card.append(top, store, detail);
+    return card;
   }));
 }
 
@@ -223,7 +256,7 @@ function renderChart(product) {
     const y = yOf(tick);
     svgNode("line", {
       x1: MARGIN.left, x2: width - MARGIN.right, y1: y, y2: y,
-      stroke: "var(--hairline)", "stroke-width": 1,
+      stroke: "var(--line)", "stroke-width": 1,
     }, svg);
     svgText(svg, { x: MARGIN.left - 8, y: y + 4, "text-anchor": "end" }, numberFormat.format(tick));
   }
@@ -248,20 +281,20 @@ function renderChart(product) {
     }, svg);
     text.textContent = label;
   };
-  referenceLine(average, `Média ${numberFormat.format(average)}`, "6 4", "var(--text-secondary)", current === null || current < average);
+  referenceLine(average, `Média ${numberFormat.format(average)}`, "6 4", "var(--muted)", current === null || current < average);
   if (current !== null) {
-    referenceLine(current, `Atual ${numberFormat.format(current)}`, "2 3", "var(--text-primary)", current >= average);
+    referenceLine(current, `Atual ${numberFormat.format(current)}`, "2 3", "var(--text)", current >= average);
   }
 
   const crosshair = svgNode("line", {
-    y1: MARGIN.top, y2: baseline, stroke: "var(--text-secondary)", "stroke-width": 1, visibility: "hidden",
+    y1: MARGIN.top, y2: baseline, stroke: "var(--muted)", "stroke-width": 1, visibility: "hidden",
   }, svg);
   const plot = { crosshair, width };
 
   if (purchases.length > 1) {
     svgNode("polyline", {
       points: purchases.map((purchase, index) => `${xOf(times[index])},${yOf(purchase.price)}`).join(" "),
-      fill: "none", stroke: "var(--series)", "stroke-width": 2,
+      fill: "none", stroke: "var(--accent)", "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round",
     }, svg);
   }
@@ -272,7 +305,7 @@ function renderChart(product) {
     const y = yOf(purchase.price);
     const point = svgNode("g", { class: "point", tabindex: 0 }, svg);
     svgNode("circle", {
-      class: "dot", cx: x, cy: y, r: 5, fill: "var(--series)", stroke: "var(--surface)", "stroke-width": 2,
+      class: "dot", cx: x, cy: y, r: 5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2,
     }, point);
     if (labeled.has(index)) {
       const anchor = x > width - 60 ? "end" : x < MARGIN.left + 40 ? "start" : "middle";
@@ -296,7 +329,7 @@ function renderChart(product) {
 function renderVariation(purchases) {
   const node = el("variation");
   const variation = variationOf(purchases);
-  node.className = "variation";
+  node.classList.remove("up", "down", "flat");
   if (!variation) {
     node.textContent = "";
     return;
@@ -347,6 +380,10 @@ async function start() {
   storeSelect.addEventListener("change", fillOptions);
   for (const input of [fromInput, toInput, sortSelect]) input.addEventListener("change", fillOptions);
   select.addEventListener("change", render);
+  // Em telas largas os filtros ficam sempre abertos e inline; no celular, recolhidos.
+  const syncFilters = () => { filtersPanel.open = wide.matches; };
+  wide.addEventListener("change", syncFilters);
+  syncFilters();
   el("current").addEventListener("input", render);
   new ResizeObserver(render).observe(chart);
   fillSelect(categorySelect, [...new Set(products.flatMap((p) => p.categories))].sort(), "Todas");
