@@ -99,3 +99,11 @@ class PagesTest(ApiTestCase):
         bar = body[body.index('id="selection-bar"'):]
         self.assertIn('id="create"', bar)
         self.assertIn('id="clear"', bar)
+
+    def test_grafico_serve_elementos_que_o_js_usa_e_tabela_com_as_cinco_colunas(self):
+        body = self.html("/")
+        for hook in ('id="chart"', 'id="tooltip"', 'id="cards"', 'id="rows"'):
+            self.assertIn(hook, body)
+        table = body[body.index("<table"):body.index("</table>")]
+        for column in ("Data", "Loja", "Preço", "Quantidade", "Total"):
+            self.assertIn(f">{column}</th>", table)
