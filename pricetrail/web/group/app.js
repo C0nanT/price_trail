@@ -57,6 +57,11 @@ const priceText = (p) => (p.min === p.max ? money.format(p.min) : `${money.forma
 const metaText = (p) =>
   `${p.store} · cód. ${p.code} · ${p.unit} · ${p.purchases} ${p.purchases === 1 ? "compra" : "compras"} · ${priceText(p)}`;
 
+// Classes Tailwind dos elementos que o JS cria (o build lê este arquivo).
+const META = "text-sm text-muted tabular-nums";
+const SMALL_BTN = "btn min-h-touch px-3 text-sm";
+const DANGER_BTN = `${SMALL_BTN} border-up text-up`;
+
 const qtyFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 
 // "Notas (N)": abre a lista de notas onde o produto aparece, cada uma com link para o PDF.
@@ -70,8 +75,9 @@ function notesBlock(ref) {
       : make("span", { textContent: `${label} — PDF ${n.file} não encontrado em data/` });
     return make("li", {}, body);
   });
-  return make("details", { className: "notes" },
-    make("summary", { textContent: `Ver nota (${list.length})` }), make("ul", {}, ...items));
+  return make("details", { className: "px-3 pb-1 text-sm" },
+    make("summary", { className: "flex min-h-touch cursor-pointer items-center text-accent", textContent: `Ver nota (${list.length})` }),
+    make("ul", { className: `grid gap-2 pb-2 ${META} [&_a]:text-accent [&_a]:underline` }, ...items));
 }
 
 function flash(text) {
@@ -103,13 +109,14 @@ function renderProducts() {
   el("count").textContent = `${shown.length} de ${products.length}`;
 
   el("products").replaceChildren(...shown.map((p) => {
-    const box = make("input", { type: "checkbox", checked: selected.has(p.ref), disabled: taken.has(p.ref) });
+    const box = make("input", { type: "checkbox", className: "mt-0.5 h-6 w-6 shrink-0 accent-accent", checked: selected.has(p.ref), disabled: taken.has(p.ref) });
     box.addEventListener("change", () => toggle(p.ref, box.checked));
-    const meta = make("div", { className: "meta", textContent: metaText(p) });
-    if (taken.has(p.ref)) meta.append(" ", make("span", { className: "tag", textContent: `em: ${taken.get(p.ref)}` }));
-    const label = make("label", { className: "item" },
-      box, make("div", { className: "body" }, make("div", { className: "title", textContent: p.description }), meta));
-    return make("li", { className: "entry" + (selected.has(p.ref) ? " selected" : "") }, label, notesBlock(p.ref));
+    const meta = make("div", { className: META, textContent: metaText(p) });
+    if (taken.has(p.ref)) meta.append(" ", make("span", { className: "badge bg-raised text-muted", textContent: `em: ${taken.get(p.ref)}` }));
+    // A linha inteira é o label: tocar em qualquer ponto marca ou desmarca.
+    const label = make("label", { className: "flex min-h-touch cursor-pointer items-start gap-3 p-3" },
+      box, make("div", { className: "min-w-0 flex-1" }, make("div", { className: "break-words", textContent: p.description }), meta));
+    return make("li", { className: selected.has(p.ref) ? "bg-raised" : "" }, label, notesBlock(p.ref));
   }));
 }
 
@@ -136,12 +143,12 @@ function renderDraft() {
   const items = [...selected].map((ref) => byRef.get(ref)).filter(Boolean);
   el("draft-hint").hidden = items.length > 0;
   el("draft").replaceChildren(...items.map((p) => {
-    const remove = make("button", { className: "link", type: "button", textContent: "tirar" });
+    const remove = make("button", { className: DANGER_BTN, type: "button", textContent: "tirar" });
     remove.addEventListener("click", () => toggle(p.ref, false));
-    return make("li", { className: "entry" },
-      make("div", { className: "item" },
-        make("div", { className: "body" }, make("div", { className: "title", textContent: p.description }),
-          make("div", { className: "meta", textContent: metaText(p) })), remove),
+    return make("li", {},
+      make("div", { className: "flex items-start gap-3 p-3" },
+        make("div", { className: "min-w-0 flex-1" }, make("div", { className: "break-words", textContent: p.description }),
+          make("div", { className: META, textContent: metaText(p) })), remove),
       notesBlock(p.ref));
   }));
   const warnings = draftWarnings(items);
@@ -149,6 +156,8 @@ function renderDraft() {
   el("draft-warn").textContent = warnings.join(" ");
   if (!nameTouched) el("name").value = items.length ? items[0].description : "";
   el("create").disabled = items.length < 2 || !el("name").value.trim();
+  el("selection-bar").hidden = items.length === 0;
+  el("selection-count").textContent = `${items.length} ${items.length === 1 ? "selecionado" : "selecionados"}`;
 }
 
 function createGroup() {
@@ -172,7 +181,7 @@ function renderSuggestions() {
   el("sug-count").textContent = `${open.length}`;
   el("suggestions").replaceChildren(...open.map((s) => {
     const free = s.refs.filter((r) => !taken.has(r));
-    const pick = make("button", { type: "button", textContent: "Selecionar" });
+    const pick = make("button", { className: SMALL_BTN, type: "button", textContent: "Selecionar" });
     pick.addEventListener("click", () => {
       selected = new Set(free);
       nameTouched = false;
@@ -180,12 +189,12 @@ function renderSuggestions() {
       renderProducts();
       el("name").focus();
     });
-    const reject = make("button", { type: "button", textContent: "Não juntar" });
+    const reject = make("button", { className: DANGER_BTN, type: "button", textContent: "Não juntar" });
     reject.addEventListener("click", () => sendRejections("POST", s.refs));
-    const head = make("div", { className: "head" }, make("strong", { textContent: s.name }), pick, reject);
-    const meta = make("div", { className: "meta" }, `${free.length} produtos · ${s.reason} · cód. ${free.map((r) => r.split(":")[1]).join(", ")} `);
-    for (const w of s.warnings) meta.append(make("span", { className: "tag warn-tag", textContent: w }), " ");
-    return make("li", { className: "sug" }, head, meta);
+    const head = make("div", { className: "flex flex-wrap items-center gap-2" }, make("strong", { className: "mr-auto min-w-0 break-words", textContent: s.name }), pick, reject);
+    const meta = make("div", { className: `mt-1 ${META}` }, `${free.length} produtos · ${s.reason} · cód. ${free.map((r) => r.split(":")[1]).join(", ")} `);
+    for (const w of s.warnings) meta.append(make("span", { className: "badge bg-warn-bg text-warn", textContent: w }), " ");
+    return make("li", { className: s.warnings.length ? "border-l-4 border-warn p-3" : "p-3" }, head, meta);
   }));
 }
 
@@ -205,10 +214,10 @@ async function sendRejections(method, refs) {
 function renderRejections() {
   el("rej-count").textContent = `${rejections.length}`;
   el("rejections").replaceChildren(...rejections.map((pair) => {
-    const undo = make("button", { type: "button", textContent: "Desfazer" });
+    const undo = make("button", { className: SMALL_BTN, type: "button", textContent: "Desfazer" });
     undo.addEventListener("click", () => sendRejections("DELETE", pair));
     const label = pair.map((ref) => `${byRef.get(ref)?.description ?? "?"} (cód. ${ref.split(":")[1]})`).join(" × ");
-    return make("li", { className: "sug" }, make("div", { className: "head" }, make("span", { textContent: label }), undo));
+    return make("li", { className: "p-3" }, make("div", { className: "flex flex-wrap items-center gap-2" }, make("span", { className: "mr-auto min-w-0 break-words", textContent: label }), undo));
   }));
 }
 
@@ -228,9 +237,9 @@ function renderGroups() {
   const names = Object.keys(groups);
   el("group-count").textContent = `${names.length}`;
   el("groups").replaceChildren(...names.map((name) => {
-    const nameInput = make("input", { value: name, "aria-label": "Nome do grupo" });
+    const nameInput = make("input", { className: "field flex-1 font-semibold", value: name, "aria-label": "Nome do grupo" });
     nameInput.addEventListener("change", () => renameGroup(name, nameInput));
-    const del = make("button", { type: "button", textContent: "Excluir grupo" });
+    const del = make("button", { className: DANGER_BTN, type: "button", textContent: "Excluir grupo" });
     del.addEventListener("click", () => {
       if (!confirm(`Excluir o grupo “${name}”? Os produtos voltam a aparecer separados.`)) return;
       delete groups[name];
@@ -239,7 +248,7 @@ function renderGroups() {
     });
     const members = groups[name].map((ref) => {
       const p = byRef.get(ref);
-      const remove = make("button", { className: "link", type: "button", textContent: "tirar" });
+      const remove = make("button", { className: DANGER_BTN, type: "button", textContent: "tirar" });
       remove.addEventListener("click", () => {
         groups[name] = groups[name].filter((r) => r !== ref);
         if (!groups[name].length) delete groups[name];
@@ -248,9 +257,9 @@ function renderGroups() {
       });
       // A curadoria restaurada pode citar produto que ainda não tem nota importada.
       const text = p ? `${p.description} · cód. ${p.code} · ${p.unit} · ${priceText(p)}` : `${ref} (sem nota importada)`;
-      return make("li", {}, make("div", { className: "mrow" }, make("span", { textContent: text }), remove), notesBlock(ref));
+      return make("li", { className: "py-1" }, make("div", { className: "flex items-center justify-between gap-2 text-sm" }, make("span", { className: "break-words", textContent: text }), remove), notesBlock(ref));
     });
-    return make("li", { className: "group" }, make("header", {}, nameInput, del), make("ul", {}, ...members));
+    return make("li", { className: "rounded-lg border border-line p-3" }, make("header", { className: "mb-2 flex items-center gap-2" }, nameInput, del), make("ul", { className: "divide-y divide-line" }, ...members));
   }));
 }
 

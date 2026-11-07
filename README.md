@@ -48,6 +48,11 @@ uma subpasta dela, passe a subpasta: `python3 -m pricetrail import data/2026`.
 Pode rodar quantas vezes quiser. A nota é identificada pela chave de acesso,
 então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
 
+Com o servidor ligado (veja abaixo), também dá para importar pela página
+<http://127.0.0.1:8000/import>: escolha ou arraste um ou vários PDFs. Cada nota nova é
+guardada em `data/` como `AAAA-MM-DD_<chave>.pdf`; arquivo com erro não é guardado.
+O envio tem limite de 20 MB e registra no mesmo log do `import` (`serve --log` escolhe o arquivo).
+
 ## Ver o gráfico
 
 Inicie o servidor local e abra <http://127.0.0.1:8000/> no navegador:
@@ -177,6 +182,26 @@ Para recriar o banco do zero (outra máquina, ou banco perdido):
 2. Rode `python3 -m pricetrail restore curadoria.json`.
 
 Os PDFs não entram no repositório; guarde-os à parte.
+
+## Estilo (Tailwind)
+
+O visual vem de um único CSS, `pricetrail/web/app.css`, gerado pelo Tailwind e
+commitado (rodar o servidor não precisa do Tailwind). Só quem muda classes nos
+HTMLs/JS de `pricetrail/web/` precisa regerar (as classes também ficam em
+strings dos JS, então editar classes no JS também exige `make css`). Usamos a CLI standalone do
+Tailwind **v3.4.17** (sem Node). Baixe o binário para `bin/tailwindcss`
+(ignorado pelo git):
+
+```bash
+mkdir -p bin
+curl -sL -o bin/tailwindcss https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64
+chmod +x bin/tailwindcss
+make css          # gera pricetrail/web/app.css minificado
+make css-watch    # regera a cada mudança
+```
+
+Entrada em `tailwind/input.css` (cores claro/escuro como variáveis CSS) e
+configuração em `tailwind.config.js`. Commite o `app.css` junto com a mudança.
 
 ## Testes
 

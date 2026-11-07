@@ -2,65 +2,91 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Agrupar produtos</title>
-<link rel="stylesheet" href="/static/group/style.css">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header class="top">
-  <h1>Agrupar produtos</h1>
-  <a href="/">Ver gráfico</a>
-  <div class="actions">
-    <span id="status" role="status" aria-live="polite"></span>
+<nav aria-label="Principal" class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface md:static md:border-b md:border-t-0" style="padding-bottom: env(safe-area-inset-bottom)">
+  <div class="mx-auto grid max-w-4xl grid-cols-3 md:flex md:gap-2 md:px-4">
+    <a href="/" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Gráfico</a>
+    <a href="/groups" aria-current="page" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Agrupar</a>
+    <a href="/import" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Importar</a>
   </div>
-</header>
+</nav>
+<main class="page md:max-w-6xl pb-[calc(var(--nav-h)+var(--bar-h)+1.5rem)] md:pb-24">
+  <h1 class="mb-3 text-2xl font-bold leading-tight">Agrupar produtos</h1>
 
-<p id="error" class="warn" role="alert" hidden></p>
-<p id="save-error" class="warn" role="alert" hidden></p>
-<main>
-  <section class="panel" aria-labelledby="h-products">
-    <h2 id="h-products">Produtos <small id="count"></small></h2>
-    <div class="filters">
-      <label>Buscar <input id="search" type="search" placeholder="Ex.: detergente" autocomplete="off"></label>
-      <label>Loja <select id="store"></select></label>
-      <label class="check"><input id="ungrouped" type="checkbox" checked> Só sem grupo</label>
-    </div>
-    <ul id="products" class="list"></ul>
-  </section>
+  <p id="error" class="alert mb-3" role="alert" hidden></p>
+  <p id="save-error" class="alert sticky top-2 z-10 mb-3 border-2 border-warn" role="alert" hidden></p>
 
-  <section class="panel" aria-labelledby="h-draft">
-    <h2 id="h-draft">Novo grupo</h2>
-    <p class="hint" id="draft-hint">Marque produtos na lista ou clique em uma sugestão.</p>
-    <ul id="draft" class="list compact"></ul>
-    <p id="draft-warn" class="warn" hidden></p>
-    <label>Nome do grupo <input id="name" autocomplete="off" placeholder="Ex.: Detergente Ypê"></label>
-    <div class="row">
-      <button id="create" class="primary" disabled>Criar grupo</button>
-      <button id="clear">Limpar seleção</button>
-    </div>
+  <nav aria-label="Seções" class="sticky top-0 z-[5] -mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-line bg-surface px-4 md:hidden">
+    <a href="#h-products" class="flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-accent">Produtos</a>
+    <a href="#h-draft" class="flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-accent">Novo grupo</a>
+    <a href="#h-suggestions" class="flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-accent">Sugestões</a>
+    <a href="#h-groups" class="flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-accent">Grupos</a>
+    <a href="#h-stores" class="flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-accent">Lojas</a>
+  </nav>
 
-    <h2>Sugestões <small id="sug-count"></small></h2>
-    <p class="hint">Grupos com <span class="tag warn-tag">aviso</span> costumam ser tamanhos diferentes.</p>
-    <ul id="suggestions" class="list"></ul>
+  <div class="grid gap-8 md:grid-cols-2 md:gap-6">
+    <section class="min-w-0 scroll-mt-16 md:scroll-mt-4" aria-labelledby="h-products">
+      <h2 id="h-products" class="mb-2 text-lg font-bold">Produtos <small id="count" class="text-sm font-normal text-muted"></small></h2>
+      <div class="mb-3 grid gap-3">
+        <label class="grid gap-1 text-sm text-muted">Buscar
+          <input id="search" type="search" placeholder="Ex.: detergente" autocomplete="off" class="field">
+        </label>
+        <label class="grid gap-1 text-sm text-muted">Loja
+          <select id="store" class="field"></select>
+        </label>
+        <label class="flex min-h-touch cursor-pointer items-center gap-3 text-ink">
+          <input id="ungrouped" type="checkbox" checked class="h-6 w-6 shrink-0 accent-accent"> Só sem grupo
+        </label>
+      </div>
+      <ul id="products" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_produto_para_esses_filtros.']"></ul>
+    </section>
 
-    <h2>Não juntar <small id="rej-count"></small></h2>
-    <p class="hint">Pares que você descartou. Desfazer traz a sugestão de volta.</p>
-    <ul id="rejections" class="list"></ul>
-  </section>
+    <section class="min-w-0 scroll-mt-16 md:scroll-mt-4" aria-labelledby="h-draft">
+      <h2 id="h-draft" class="mb-2 text-lg font-bold">Novo grupo</h2>
+      <p class="mb-2 text-sm text-muted" id="draft-hint">Marque produtos na lista ou toque em uma sugestão.</p>
+      <ul id="draft" class="mb-3 divide-y divide-line overflow-hidden rounded-lg border border-line empty:hidden"></ul>
+      <p id="draft-warn" class="alert mb-3 text-sm" hidden></p>
+      <label class="grid gap-1 text-sm text-muted">Nome do grupo
+        <input id="name" autocomplete="off" placeholder="Ex.: Detergente Ypê" class="field">
+      </label>
 
-  <section class="panel wide" aria-labelledby="h-groups">
-    <h2 id="h-groups">Grupos <small id="group-count"></small></h2>
-    <ul id="groups" class="groups"></ul>
-  </section>
+      <h2 id="h-suggestions" class="mb-2 mt-8 scroll-mt-16 text-lg font-bold md:scroll-mt-4">Sugestões <small id="sug-count" class="text-sm font-normal text-muted"></small></h2>
+      <p class="mb-2 text-sm text-muted">Grupos com <span class="badge bg-warn-bg text-warn">aviso</span> costumam ser tamanhos diferentes.</p>
+      <ul id="suggestions" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhuma_sugestão_no_momento.']"></ul>
 
-  <section class="panel wide" aria-labelledby="h-stores">
-    <h2 id="h-stores">Lojas <small id="stores-count"></small></h2>
-    <p id="stores-error" class="warn" role="alert" hidden></p>
-    <p class="hint">Sem cadastro, a loja usa o nome da nota e a categoria "Outros".</p>
-    <ul id="stores-missing" class="list"></ul>
-    <ul id="stores-known" class="list"></ul>
-  </section>
+      <h2 class="mb-2 mt-8 text-lg font-bold">Não juntar <small id="rej-count" class="text-sm font-normal text-muted"></small></h2>
+      <p class="mb-2 text-sm text-muted">Pares que você descartou. Desfazer traz a sugestão de volta.</p>
+      <ul id="rejections" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_par_descartado.']"></ul>
+    </section>
+
+    <section class="min-w-0 scroll-mt-16 md:col-span-2 md:scroll-mt-4" aria-labelledby="h-groups">
+      <h2 id="h-groups" class="mb-2 text-lg font-bold">Grupos <small id="group-count" class="text-sm font-normal text-muted"></small></h2>
+      <ul id="groups" class="grid gap-3 md:grid-cols-2 empty:rounded-lg empty:border empty:border-dashed empty:border-line empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_grupo_ainda._Crie_um_acima.']"></ul>
+    </section>
+
+    <section class="min-w-0 scroll-mt-16 md:col-span-2 md:scroll-mt-4" aria-labelledby="h-stores">
+      <h2 id="h-stores" class="mb-2 text-lg font-bold">Lojas <small id="stores-count" class="text-sm font-normal text-muted"></small></h2>
+      <p id="stores-error" class="alert mb-2" role="alert" hidden></p>
+      <p class="mb-2 text-sm text-muted">Sem cadastro, a loja usa o nome da nota e a categoria "Outros".</p>
+      <ul id="stores-missing" class="mb-3 divide-y divide-line overflow-hidden rounded-lg border border-line empty:hidden"></ul>
+      <ul id="stores-known" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:hidden"></ul>
+    </section>
+  </div>
 </main>
+
+<p id="status" role="status" aria-live="polite" class="fixed inset-x-4 bottom-[calc(var(--nav-h)+var(--bar-h)+0.5rem)] z-20 mx-auto max-w-md rounded-lg bg-ink px-3 py-2 text-center text-sm font-semibold text-surface empty:hidden md:bottom-20"></p>
+
+<div id="selection-bar" hidden class="fixed inset-x-0 bottom-[var(--nav-h)] z-10 border-t border-line bg-surface md:bottom-0">
+  <div class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
+    <p id="selection-count" class="mr-auto text-sm font-semibold" aria-live="polite"></p>
+    <button id="clear" type="button" class="btn">Limpar</button>
+    <button id="create" type="button" class="btn btn-primary" disabled>Criar grupo</button>
+  </div>
+</div>
 <script src="/static/common.js"></script>
 <script src="/static/group/app.js"></script>
 <script src="/static/group/stores.js"></script>

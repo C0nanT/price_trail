@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb;
+    --raised: #f3f2ef;
+    --text: #0b0b0b;
+    --muted: #52514e;
+    --line: #e4e3df;
+    --accent: #2a78d6;
+    --accent-text: #ffffff;
+    --warn: #8a5300;
+    --warn-bg: #fff1d6;
+    --up: #b3261e;
+    --down: #1b7a3a;
+    --ok: #1b7a3a;
+    /* Altura da barra de navegação fixa (mobile): 44px + borda + área segura. Barra de seleção, aviso e respiro da página partem dela. */
+    --nav-h: calc(45px + env(safe-area-inset-bottom));
+    --bar-h: 62px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface: #1a1a19;
+      --raised: #242423;
+      --text: #f0efec;
+      --muted: #c3c2b7;
+      --line: #343432;
+      --accent: #3987e5;
+      --accent-text: #0b0b0b;
+      --warn: #f0c36a;
+      --warn-bg: #3a2e12;
+      --up: #f2796f;
+      --down: #5cc47a;
+      --ok: #5cc47a;
+    }
+  }
+  body { @apply bg-surface text-ink; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+@layer components {
+  /* Espaço para a barra inferior fixa (mobile), com a área segura do iOS. */
+  .page { @apply mx-auto max-w-4xl px-4 pt-5 md:pt-6; padding-bottom: calc(var(--nav-h) + 2rem); }
+  @media (min-width: 768px) { .page { padding-bottom: 3rem; } }
+  .btn { @apply inline-flex min-h-touch items-center justify-center rounded-lg border border-line bg-raised px-4 font-semibold text-ink; }
+  .btn-primary { @apply border-accent bg-accent text-accent-ink; }
+  .btn:disabled { @apply cursor-wait opacity-60; }
+  .field { @apply min-h-touch w-full min-w-0 rounded-lg border border-muted bg-surface px-3 text-base text-ink; }
+  .alert { @apply rounded-lg bg-warn-bg px-3 py-2 text-warn; }
+  .badge { @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold; }
+}
+
+/* Gráfico: SVG e tooltip criados pelo JS, que utilitários não alcançam. */
+@layer components {
+  #chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  #chart text { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #chart text.value { fill: var(--text); font-size: 13px; font-weight: 600; }
+  .point:focus { outline: none; }
+  .point:focus .dot { stroke: var(--text); }
+  #tooltip { @apply pointer-events-none absolute top-0 z-[1] whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-2 text-[13px]; box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); }
+  #tooltip strong { @apply block text-[15px] tabular-nums; }
+  #tooltip span { @apply block text-muted; }
+}
