@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Flask, abort, g, jsonify, request, send_file
 
-from . import catalog, importer, shopping
+from . import auth, catalog, importer, shopping
 from .db import connect, open_connection
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -18,6 +18,7 @@ ACCESS_KEY_RE = re.compile(r"[0-9]{44}")
 MAX_UPLOAD_MB = 20
 MAX_UPLOAD_FILES = 50
 APP_HEADER = "X-Pricetrail"  # enviado pela página /import
+CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SUMMARY_KEYS = {importer.NEW: "new", importer.EXISTING: "existing", importer.ERROR: "error"}
 
 
@@ -26,6 +27,8 @@ class Pairs(list):
 
 
 def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) -> Flask:
+    """Sobe só com login configurado: sem as variáveis, levanta auth.AuthConfigError."""
+    auth_config = auth.config_from_env()
     connect(db_path, data_dir, legacy_dir).close()  # migra agora: um erro aparece ao subir, não no primeiro request
     allowed_hosts = LOCAL_HOSTS | {
         host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()
@@ -54,6 +57,16 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
         """Contra DNS rebinding: um site externo não pode se passar pelo servidor local."""
         if request.host.split(":")[0].lower() not in allowed_hosts:
             abort(403)
+
+    @app.before_request
+    def refuse_foreign_origin():
+        """Contra envio de outro site: o que altera dados, quando traz Origin, precisa vir do próprio servidor."""
+        origin = request.headers.get("Origin")
+        if request.method in CHANGING_METHODS and origin is not None and origin != request.host_url.rstrip("/"):
+            return jsonify(error="Envio recusado: a requisição veio de outro site."), 403
+        return None
+
+    auth.install(app, auth_config)
 
     @app.get("/health")
     def health():
@@ -144,13 +157,10 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
     def sent_by_this_app() -> bool:
         """Contra envio de outro site: um formulário multipart não passa por preflight de CORS.
 
-        O cabeçalho próprio força o preflight, que o servidor não autoriza. O Origin,
-        quando vem, precisa ser o próprio servidor.
+        O cabeçalho próprio força o preflight, que o servidor não autoriza. O Origin
+        já foi conferido em refuse_foreign_origin.
         """
-        if request.headers.get(APP_HEADER) != "1":
-            return False
-        origin = request.headers.get("Origin")
-        return origin is None or origin == request.host_url.rstrip("/")
+        return request.headers.get(APP_HEADER) == "1"
 
     @app.get("/import")
     def import_page():

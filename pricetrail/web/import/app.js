@@ -6,6 +6,7 @@ async function upload(files) {
   const form = new FormData();
   for (const file of files) form.append("files", file);
   const response = await fetch("/api/import", { method: "POST", headers: { "X-Pricetrail": "1" }, body: form });
+  if (response.status === 401) return goToLogin();
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(data?.error || `o servidor respondeu ${response.status}`, response.status);
   return data;
