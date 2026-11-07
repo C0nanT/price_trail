@@ -11,13 +11,16 @@
   <h1>Importar notas</h1>
   <p class="nav"><a href="/">Ver gráfico</a> · <a href="/groups">Agrupar produtos</a></p>
   <form id="form">
-    <label>PDFs de NFC-e <input id="files" name="files" type="file" multiple accept="application/pdf,.pdf"></label>
+    <div id="drop" class="drop">Arraste os PDFs para cá ou
+    <label>escolha no computador <input id="files" name="files" type="file" multiple accept="application/pdf,.pdf"></label></div>
     <button id="send" type="submit">Enviar</button>
     <span id="status" role="status" aria-live="polite"></span>
   </form>
   <p id="error" class="warn" role="alert" hidden></p>
   <section id="result" hidden>
     <p id="summary"></p>
+    <p id="unregistered" class="warn" hidden>Há lojas sem cadastro: <a href="/groups#h-stores">cadastre em Agrupar produtos, seção Lojas</a>.</p>
+    <p class="nav"><a href="/">Ver o gráfico</a> · <a href="/groups">Agrupar os produtos novos</a></p>
     <table>
       <thead><tr><th>Arquivo</th><th>Resultado</th><th>Detalhe</th></tr></thead>
       <tbody id="rows"></tbody>

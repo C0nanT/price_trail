@@ -49,7 +49,7 @@ Pode rodar quantas vezes quiser. A nota é identificada pela chave de acesso,
 então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
 
 Com o servidor ligado (veja abaixo), também dá para importar pela página
-<http://127.0.0.1:8000/import>: escolha um ou vários PDFs e envie. Cada nota nova é
+<http://127.0.0.1:8000/import>: escolha ou arraste um ou vários PDFs. Cada nota nova é
 guardada em `data/` como `AAAA-MM-DD_<chave>.pdf`; arquivo com erro não é guardado.
 O envio tem limite de 20 MB e registra no mesmo log do `import` (`serve --log` escolhe o arquivo).
 
