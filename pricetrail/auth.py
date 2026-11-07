@@ -7,7 +7,8 @@ import hmac
 import logging
 import os
 import secrets
-from collections.abc import Mapping
+import sqlite3
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import quote, urlsplit
@@ -15,6 +16,9 @@ from urllib.parse import quote, urlsplit
 from argon2 import PasswordHasher, extract_parameters
 from argon2.exceptions import InvalidHashError, VerificationError
 from flask import Flask, jsonify, redirect, request, session
+
+from . import login_limit
+from .client_ip import pick_client_ip
 
 REQUIRED_ENV = ("AUTH_USERNAME", "AUTH_PASSWORD_HASH", "SECRET_KEY")
 SESSION_LIFETIME = timedelta(days=30)
@@ -89,12 +93,16 @@ def is_public(path: str) -> bool:
 
 
 def client_ip() -> str:
-    # O ticket 05 troca pelo IP escolhido em pick_client_ip.
-    return request.remote_addr or "unknown"
+    """IP do visitante pela cadeia de proxies; nunca o remote_addr, que é o do Traefik."""
+    return pick_client_ip(request.headers.get("X-Forwarded-For"), request.headers.get("X-Real-IP"))
 
 
-def install(app: Flask, config: AuthConfig) -> None:
-    """Liga a sessão, o controle de acesso e as rotas de login no app."""
+def locked_message(minutes: int) -> str:
+    return f"Muitas tentativas erradas. Tente de novo em {minutes} min."
+
+
+def install(app: Flask, config: AuthConfig, db: Callable[[], sqlite3.Connection]) -> None:
+    """Liga a sessão, o controle de acesso e as rotas de login no app. db dá a conexão do request."""
     app.config.update(
         SECRET_KEY=config.secret_key,
         SESSION_COOKIE_HTTPONLY=True,
@@ -144,19 +152,32 @@ def install(app: Flask, config: AuthConfig) -> None:
         if not isinstance(body, dict):
             body = {}
         username, password = body.get("username"), body.get("password")
+        ip = client_ip()
+        user_ok = isinstance(username, str) and hmac.compare_digest(username.encode("utf-8"), expected_user)
+        user = config.username if user_ok else UNKNOWN_USER
+        # Conta como falha antes de comparar a senha: requisições paralelas não passam juntas.
+        attempt = login_limit.register_attempt(db(), ip)
+        if not attempt.allowed:
+            log.warning("login bloqueado", extra={"event": "login_bloqueado", "ip": ip, "user": user})
+            return jsonify(error=locked_message(attempt.minutes_left), minutesLeft=attempt.minutes_left), 429
+        if attempt.cap_reached:
+            log.warning("teto global de falhas de login atingido",
+                        extra={"event": "teto_global_atingido", "ip": ip, "user": user})
         # O hash é verificado sempre e o usuário comparado em tempo constante:
         # nem a resposta nem o tempo dizem qual dos dois estava errado.
-        user_ok = isinstance(username, str) and hmac.compare_digest(username.encode("utf-8"), expected_user)
         password_ok = password_matches(config.password_hash, password if isinstance(password, str) else "")
-        user = config.username if user_ok else UNKNOWN_USER
         if not (user_ok and password_ok):
-            log.warning("login falhou", extra={"event": "login_falhou", "ip": client_ip(), "user": user})
-            return jsonify(error=WRONG_CREDENTIALS), 401
+            log.warning("login falhou", extra={"event": "login_falhou", "ip": ip, "user": user})
+            failed = {"error": WRONG_CREDENTIALS}
+            if attempt.lock_minutes_if_wrong:
+                failed["lockMinutesIfWrong"] = attempt.lock_minutes_if_wrong
+            return jsonify(failed), 401
+        login_limit.clear_failures(db(), ip)
         session.clear()
         session.permanent = True
         session["auth"] = True
         session["csrf"] = secrets.token_urlsafe(32)
-        log.info("login ok", extra={"event": "login_ok", "ip": client_ip(), "user": user})
+        log.info("login ok", extra={"event": "login_ok", "ip": ip, "user": user})
         return jsonify(next=safe_next(body.get("next")))
 
     @app.post("/api/logout")

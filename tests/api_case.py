@@ -94,17 +94,26 @@ class ApiTestCase(unittest.TestCase):
     def write_legacy(self, name, content):
         (self.legacy / name).write_text(json.dumps(content), encoding="utf-8")
 
-    def anon_client(self):
-        return create_app(self.db, self.data, self.legacy).test_client()
+    def anon_client(self, ip="127.0.0.1"):
+        """Cliente sem sessão. O IP chega como o Traefik o entrega, no X-Forwarded-For."""
+        client = create_app(self.db, self.data, self.legacy).test_client()
+        client.environ_base["HTTP_X_FORWARDED_FOR"] = ip
+        return client
 
     def client(self):
-        """Cliente já logado, com o cookie da sessão em cada host aceito (há testes que trocam o Host)."""
+        """Cliente já logado, com o cookie da sessão em cada host aceito (há testes que trocam o Host).
+
+        Loga uma vez por teste e reaproveita o cookie: todo login, certo ou errado, conta no teto
+        global de tentativas, e há testes que pedem muitos clientes.
+        """
         client = self.anon_client()
-        response = self.login(client)
-        self.assertEqual(response.status_code, 200)
-        cookie = client.get_cookie("session")
+        if getattr(self, "_session_cookie", None) is None:
+            response = self.login(client)
+            self.assertEqual(response.status_code, 200)
+            self._session_cookie = client.get_cookie("session")
+        cookie = self._session_cookie
         extra = {host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()}
-        for host in {"127.0.0.1"} | extra:
+        for host in {"localhost", "127.0.0.1"} | extra:
             client.set_cookie("session", cookie.value, domain=host)
         return client
 

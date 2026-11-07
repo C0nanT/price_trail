@@ -66,7 +66,7 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
             return jsonify(error="Envio recusado: a requisição veio de outro site."), 403
         return None
 
-    auth.install(app, auth_config)
+    auth.install(app, auth_config, db)
 
     @app.get("/health")
     def health():
