@@ -8,7 +8,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from .db import CODE_REF_RE, canonical_pair
+from .db import canonical_pair, is_cnpj_root, parse_ref
 from .pdfs import resolve_in_data
 
 SIMILAR_RATIO = 0.88
@@ -172,7 +172,7 @@ def drop_rejected(suggestions: list[dict], rejected: set[tuple]) -> list[dict]:
         if len(refs) < 2 or key in seen:
             continue
         seen.add(key)
-        keep = {ref.split(":", 1)[1] for ref in refs}
+        keep = {split_ref(ref)[1] for ref in refs}
         members = [m for m in suggestion["members"] if m["code"] in keep]
         result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
     return result
@@ -269,7 +269,7 @@ def validate_groups(pairs: list[tuple[str, object]]) -> list[tuple[str, list[str
         if not isinstance(refs, list) or not refs:
             raise GroupsError(f"O grupo “{name}” precisa de uma lista de produtos.")
         for ref in refs:
-            if not isinstance(ref, str) or not CODE_REF_RE.match(ref):
+            if not parse_ref(ref):
                 raise GroupsError(f"“{ref}” no grupo “{name}” não é uma referência raiz:código.")
             if owner.setdefault(ref, name) != name:
                 raise GroupsError(f"O produto {ref} está nos grupos “{owner[ref]}” e “{name}”.")
@@ -291,7 +291,7 @@ def _write_groups(conn: sqlite3.Connection, groups: list[tuple[str, list[str]]])
         group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
         conn.executemany(
             "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
-            [(group_id, *ref.split(":", 1)) for ref in refs],
+            [(group_id, *split_ref(ref)) for ref in refs],
         )
 
 
@@ -355,7 +355,7 @@ def is_registered_store(conn: sqlite3.Connection, cnpj_root: str) -> bool:
 
 def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dict:
     """Cria ou atualiza a loja. Categoria vazia vira "Outros"."""
-    if not (len(cnpj_root) == 8 and cnpj_root.isascii() and cnpj_root.isdigit()):
+    if not is_cnpj_root(cnpj_root):
         raise StoreError("a raiz do CNPJ deve ter 8 dígitos")
     if not isinstance(store, str) or not store.strip():
         raise StoreError("o nome da loja não pode ser vazio")
@@ -399,10 +399,12 @@ class RejectionError(ValueError):
 def _pairs_between(refs) -> list[tuple]:
     if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
         raise RejectionError("envie uma lista de referências no formato raiz:código")
+    parsed = []
     for ref in refs:
-        if not CODE_REF_RE.match(ref):
+        if not (pair := parse_ref(ref)):
             raise RejectionError(f"{ref!r} não é uma referência raiz:código")
-    unique = [split_ref(ref) for ref in dict.fromkeys(refs)]
+        parsed.append(pair)
+    unique = list(dict.fromkeys(parsed))
     if len(unique) < 2:
         raise RejectionError("informe ao menos duas referências diferentes")
     return [canonical_pair(a, b) for a, b in itertools.combinations(unique, 2)]
@@ -482,20 +484,18 @@ def _parse_curation(text: str) -> tuple[list, list, list]:
     if not isinstance(data["rejected_pairs"], list):
         raise CurationFileError('"rejected_pairs" deve ser uma lista de [ref, ref]')
     for pair in data["rejected_pairs"]:
-        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(r, str) for r in pair)):
+        if not (isinstance(pair, list) and len(pair) == 2):
             raise CurationFileError(f"par rejeitado inválido: {pair!r}")
-        for ref in pair:
-            if not CODE_REF_RE.match(ref):
-                raise CurationFileError(f"{ref!r} não é uma referência raiz:código")
-        if pair[0] == pair[1]:
-            raise CurationFileError(f"par rejeitado com a mesma referência duas vezes: {pair[0]!r}")
-        pairs.append(canonical_pair(split_ref(pair[0]), split_ref(pair[1])))
+        try:
+            pairs += _pairs_between(pair)
+        except RejectionError as error:
+            raise CurationFileError(f"par rejeitado inválido {pair!r}: {error}") from error
 
     if not isinstance(data["stores"], dict):
         raise CurationFileError('"stores" deve ser {"raiz": {"store": ..., "category": ...}}')
     stores = []
     for root, entry in data["stores"].items():
-        if not (len(root) == 8 and root.isascii() and root.isdigit()):
+        if not is_cnpj_root(root):
             raise CurationFileError(f"raiz de CNPJ inválida em stores: {root!r}")
         if not isinstance(entry, dict):
             raise CurationFileError(f"a loja {root} deve ser um objeto com store e category")

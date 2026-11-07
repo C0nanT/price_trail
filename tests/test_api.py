@@ -190,8 +190,12 @@ class MigrationTests(ApiTestCase):
         self.assertIn("USING INDEX group_refs_group_id", plan)
 
     def test_referencia_que_nao_e_texto_aborta(self):
-        self.write_legacy("products.json", {"A": [12345678]})
-        self.assert_migration_fails("12345678")
+        for ref in (12345678, ["75315333:10"]):
+            for name in ("products.json", "products.rejected.json"):
+                with self.subTest(ref=ref, name=name):
+                    self.write_legacy(name, {"A": [ref, "75315333:11"]})
+                    self.assert_migration_fails(name)
+                    (self.legacy / name).unlink()
 
     def test_loja_que_nao_e_objeto_aborta(self):
         self.write_legacy("stores.json", {"75315333": "Atacadão"})

@@ -54,6 +54,11 @@ class SaveGroupsTests(ApiTestCase):
         self.assertEqual(self.put("{quebrado").status_code, 422)
         self.assertEqual(self.groups(), {})
 
+    def test_raiz_com_digitos_que_nao_sao_ascii_ou_quebra_de_linha_da_422(self):
+        for ref in ("７５３１５３３３:1", "75315333:1\n"):
+            self.assertEqual(self.put({"X": [ref]}).status_code, 422, ref)
+        self.assertEqual(self.groups(), {})
+
     def test_escrita_sem_content_type_json_e_recusada(self):
         for content_type in ("text/plain", "application/x-www-form-urlencoded"):
             self.assertEqual(self.put({"X": [A]}, content_type).status_code, 415)
