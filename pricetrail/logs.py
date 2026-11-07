@@ -3,12 +3,45 @@ import json
 import logging
 import os
 import sys
+import traceback
 from datetime import datetime, timezone
 
 _STANDARD = set(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {"message", "asctime"}
 
 
+def exception_chain(error: BaseException) -> list[BaseException]:
+    """A exceção e suas causas, da mais antiga para a mais nova, como o traceback padrão mostra."""
+    chain, seen = [], set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        chain.append(error)
+        error = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+    return chain[::-1]
+
+
+def traceback_without_messages(error: BaseException) -> str:
+    """Arquivo, linha, função e tipo de cada exceção da cadeia, sem o texto delas nem o código.
+
+    O texto de um erro do parser ou do SQLite pode trazer nome de loja, de item ou de arquivo.
+    """
+    parts = []
+    for index, link in enumerate(exception_chain(error)):
+        if index:
+            parts.append("\nA exceção acima levou a esta:\n\n")
+        parts.append("Traceback (most recent call last):\n")
+        for frame in traceback.extract_tb(link.__traceback__):
+            parts.append(f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n')
+        kind = type(link)
+        parts.append(f"{kind.__module__}.{kind.__qualname__} (mensagem omitida)\n")
+    return "".join(parts).rstrip("\n")
+
+
 class JsonFormatter(logging.Formatter):
+    """Formato dos logs do servidor e do gunicorn. O traceback vai sem o texto das exceções."""
+
+    def formatException(self, ei) -> str:
+        return traceback_without_messages(ei[1])
+
     def format(self, record: logging.LogRecord) -> str:
         event = {
             "ts": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),

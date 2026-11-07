@@ -2,6 +2,7 @@
 import io
 import json
 import logging
+import sqlite3
 import sys
 from unittest import mock
 
@@ -58,6 +59,22 @@ class ServerLogTest(ApiTestCase):
         (error,) = [line for line in self.lines() if line["level"] == "ERROR"]
         self.assertIn("RuntimeError", error["exc_info"])
         self.assertNotIn("a.pdf", error["msg"])
+
+    def test_traceback_do_erro_inesperado_nao_leva_a_mensagem_da_excecao(self):
+        def boom(text):
+            try:
+                raise sqlite3.OperationalError("near MERCADO SECRETO: syntax error")
+            except sqlite3.OperationalError as cause:
+                raise ValueError("loja MERCADO SECRETO no arquivo minha-nota.pdf") from cause
+
+        with mock.patch("pricetrail.importer.parse_note", side_effect=boom):
+            self.upload(("minha-nota.pdf", note_text(item("10"))))
+        everything = self.stream.getvalue()
+        for secret in ("MERCADO SECRETO", "minha-nota"):
+            self.assertNotIn(secret, everything)
+        (error,) = [line for line in self.lines() if line["level"] == "ERROR"]
+        for useful in ("ValueError", "OperationalError", "importer.py", "line "):
+            self.assertIn(useful, error["exc_info"])
 
 
 class ConfigureTest(ApiTestCase):

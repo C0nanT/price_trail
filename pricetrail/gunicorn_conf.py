@@ -35,6 +35,11 @@ class JsonLogger(glogging.Logger):
 
     def setup(self, cfg):
         super().setup(cfg)
+        allowed = cfg.forwarded_allow_ips
+        # Parseado uma vez aqui, não a cada linha de acesso. None: confia em qualquer IP ("*").
+        self._trusted_networks = None if "*" in allowed else [
+            ipaddress.ip_network(net, strict=False) for net in allowed
+        ]
         formatter = JsonFormatter()
         for log in (self.error_log, self.access_log):
             for handler in log.handlers:
@@ -62,14 +67,13 @@ class JsonLogger(glogging.Logger):
         return peer if ip == "unknown" else ip
 
     def _trusted(self, peer):
-        allowed = self.cfg.forwarded_allow_ips
-        if "*" in allowed:
+        if self._trusted_networks is None:
             return True
         try:
             address = ipaddress.ip_address(peer)
         except ValueError:
             return False
-        return any(address in ipaddress.ip_network(net, strict=False) for net in allowed)
+        return any(address in net for net in self._trusted_networks)
 
 
 logger_class = JsonLogger

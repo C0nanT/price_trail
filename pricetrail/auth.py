@@ -27,6 +27,7 @@ PUBLIC_PATHS = {"/login", "/api/session", "/api/login", "/health"}
 PUBLIC_PREFIXES = ("/static/",)
 UNKNOWN_USER = "desconhecido"  # nunca loga o que foi digitado no campo de usuário: pode ser a senha
 WRONG_CREDENTIALS = "Usuário ou senha inválidos."
+CSRF_EXPIRED = "Sessão do formulário expirada: recarregue a página e tente de novo."
 
 log = logging.getLogger("pricetrail.auth")
 
@@ -97,6 +98,10 @@ def client_ip() -> str:
     return pick_client_ip(request.headers.get("X-Forwarded-For"), request.headers.get("X-Real-IP"))
 
 
+def csrf_rejected():
+    return jsonify(error=CSRF_EXPIRED), 403
+
+
 def locked_message(minutes: int) -> str:
     return f"Muitas tentativas erradas. Tente de novo em {minutes} min."
 
@@ -147,7 +152,7 @@ def install(app: Flask, config: AuthConfig, db: Callable[[], sqlite3.Connection]
     @app.post("/api/login")
     def login():
         if not csrf_ok():
-            return jsonify(error="Sessão do formulário expirada: recarregue a página e tente de novo."), 403
+            return csrf_rejected()
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             body = {}
@@ -183,7 +188,7 @@ def install(app: Flask, config: AuthConfig, db: Callable[[], sqlite3.Connection]
     @app.post("/api/logout")
     def logout():
         if not csrf_ok():
-            return jsonify(error="Sessão do formulário expirada: recarregue a página e tente de novo."), 403
+            return csrf_rejected()
         session.clear()
         log.info("logout", extra={"event": "logout", "ip": client_ip(), "user": config.username})
         return jsonify(ok=True)
