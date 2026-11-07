@@ -166,12 +166,13 @@ function createGroup() {
   const name = el("name").value.trim();
   const refs = [...selected];
   if (!name || refs.length < 2) return;
-  const existing = groups[name] || [];
-  groups[name] = [...existing, ...refs.filter((r) => !existing.includes(r))];
+  // Mesmo nome não junta em silêncio: a seleção fica para o usuário escolher outro nome.
+  if (groups[name]) { flash(`Já existe um grupo “${name}”; escolha outro nome.`); return; }
+  groups[name] = refs;
   selected = new Set();
   nameTouched = false;
   persist();
-  flash(existing.length ? `Produtos adicionados a “${name}”` : `Grupo “${name}” criado`);
+  flash(`Grupo “${name}” criado`);
   renderAll();
 }
 
@@ -262,7 +263,8 @@ function renderGroups() {
         persist();
         renderAll();
       });
-      const text = p ? `${p.description} · cód. ${p.code} · ${p.unit} · ${priceText(p)}` : `${ref} (descrição exata, fora do banco atual)`;
+      // A curadoria restaurada pode citar produto que ainda não tem nota importada.
+      const text = p ? `${p.description} · cód. ${p.code} · ${p.unit} · ${priceText(p)}` : `${ref} (sem nota importada)`;
       return make("li", {}, make("div", { className: "mrow" }, make("span", { textContent: text }), remove), notesBlock(ref));
     });
     return make("li", { className: "group" }, make("header", {}, nameInput, del), make("ul", {}, ...members));
