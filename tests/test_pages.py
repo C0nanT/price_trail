@@ -51,3 +51,23 @@ class PagesTest(ApiTestCase):
             self.assertIn(target, nav)
         self.assertEqual(nav.count('aria-current="page"'), 1)
         self.assertRegex(nav, r'href="/import"[^>]*aria-current="page"|aria-current="page"[^>]*href="/import"')
+
+    def test_groups_tem_viewport_css_unico_e_nav_com_agrupar_atual(self):
+        body = self.html("/groups")
+        self.assertIn('name="viewport"', body)
+        self.assertIn('href="/static/app.css"', body)
+        self.assertNotIn("/static/group/style.css", body)
+        nav = body[body.index("<nav"):body.index("</nav>")]
+        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
+            self.assertIn(target, nav)
+        self.assertEqual(nav.count('aria-current="page"'), 1)
+        self.assertRegex(nav, r'href="/groups"[^>]*aria-current="page"|aria-current="page"[^>]*href="/groups"')
+
+    def test_groups_tem_ancoras_das_secoes_e_barra_de_criar_grupo(self):
+        body = self.html("/groups")
+        for anchor in ("h-products", "h-draft", "h-suggestions", "h-groups", "h-stores"):
+            self.assertIn(f'id="{anchor}"', body)
+            self.assertIn(f'href="#{anchor}"', body)
+        bar = body[body.index('id="selection-bar"'):]
+        self.assertIn('id="create"', bar)
+        self.assertIn('id="clear"', bar)

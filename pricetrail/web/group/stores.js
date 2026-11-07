@@ -2,11 +2,13 @@
 // Seção "Lojas": cadastro de nome e categoria por raiz de CNPJ (GET /api/stores, PUT /api/stores/<raiz>).
 // Independente do restante da página: usa só `make` de app.js e `el` e `fetchJson` de common.js.
 
+const INPUT = "min-h-touch min-w-0 flex-1 basis-44 rounded-lg border border-muted bg-surface px-3 text-base text-ink";
+
 function storeRow(root, name, store, category, hint) {
-  const nameInput = make("input", { value: store, placeholder: name, "aria-label": `Nome da loja ${root}` });
-  const categoryInput = make("input", { value: category, placeholder: "Outros", "aria-label": `Categoria da loja ${root}` });
-  const save = make("button", { type: "button", textContent: "Salvar" });
-  const message = make("span", { className: "meta" });
+  const nameInput = make("input", { className: INPUT, value: store, placeholder: name, "aria-label": `Nome da loja ${root}` });
+  const categoryInput = make("input", { className: INPUT, value: category, placeholder: "Outros", "aria-label": `Categoria da loja ${root}` });
+  const save = make("button", { className: "btn", type: "button", textContent: "Salvar" });
+  const message = make("span", { className: "text-sm text-warn", role: "alert" });
   const submit = async () => {
     message.textContent = "";
     try {
@@ -25,8 +27,8 @@ function storeRow(root, name, store, category, hint) {
   for (const input of [nameInput, categoryInput]) {
     input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); });
   }
-  return make("li", { className: "store-row" },
-    make("span", { className: "meta", textContent: `${root} · ${hint}` }), nameInput, categoryInput, save, message);
+  return make("li", { className: "flex flex-wrap items-center gap-2 p-3" },
+    make("span", { className: "basis-full text-sm text-muted", textContent: `${root} · ${hint}` }), nameInput, categoryInput, save, message);
 }
 
 function renderStores(data) {

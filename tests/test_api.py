@@ -267,7 +267,7 @@ class GroupPageTests(ApiTestCase):
         script = client.get("/static/group/app.js").get_data(as_text=True)
         self.assertIn('fetchJson("/api/catalog")', script)
         self.assertIn('src="/static/common.js"', html)
-        self.assertEqual(client.get("/static/group/style.css").status_code, 200)
+        self.assertEqual(client.get("/static/app.css").status_code, 200)
 
     def test_pagina_tem_link_para_o_grafico_e_area_de_erro(self):
         html = self.client().get("/groups").get_data(as_text=True)
