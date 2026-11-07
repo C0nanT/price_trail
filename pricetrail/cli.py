@@ -12,11 +12,13 @@ from .server import create_app
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
 CURATION_FILE = "curadoria.json"
+DEFAULT_LOG = PROJECT_DIR / "pricetrail.log"
 
 
-def serve(db: Path, data: Path, port: int) -> int:
-    app = create_app(db, data, PROJECT_DIR)
-    print(f"gráfico em http://{HOST}:{port}/ e agrupamento em http://{HOST}:{port}/groups")
+def serve(db: Path, data: Path, port: int, log: Path) -> int:
+    app = create_app(db, data, PROJECT_DIR, log)
+    print(f"gráfico em http://{HOST}:{port}/, agrupamento em http://{HOST}:{port}/groups"
+          f" e importação em http://{HOST}:{port}/import")
     app.run(host=HOST, port=port)
     return 0
 
@@ -56,10 +58,11 @@ def main(argv: list[str] | None = None) -> int:
 
     importar = commands.add_parser("import", parents=[paths], help="importa PDFs de NFC-e para o SQLite")
     importar.add_argument("folder", nargs="?", type=Path, help="pasta a ler (padrão: a pasta de dados)")
-    importar.add_argument("--log", type=Path, default=PROJECT_DIR / "pricetrail.log")
+    importar.add_argument("--log", type=Path, default=DEFAULT_LOG)
 
     servir = commands.add_parser("serve", parents=[paths], help="abre o gráfico e o agrupamento em um servidor local")
     servir.add_argument("--port", type=int, default=8000)
+    servir.add_argument("--log", type=Path, default=DEFAULT_LOG, help="log do upload, o mesmo do import")
 
     exportar = commands.add_parser("export", parents=[paths], help="grava grupos, pares rejeitados e lojas num JSON")
     exportar.add_argument("--out", type=Path, default=PROJECT_DIR / CURATION_FILE,
@@ -75,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import":
             return import_folder(args.folder or args.data, args.db, args.log, args.data, PROJECT_DIR)
         if args.command == "serve":
-            return serve(args.db, args.data, args.port)
+            return serve(args.db, args.data, args.port, args.log)
         if args.command == "export":
             return export(args.db, args.data, args.out)
         if args.command == "restore":
