@@ -103,6 +103,7 @@ class RejectionMigrationTests(ApiTestCase):
         self.add_note(item("1"), item("2"))
         conn = sqlite3.connect(self.db)
         conn.execute("DROP TABLE rejected_pairs")
+        conn.execute("DROP INDEX group_refs_group_id")
         conn.execute("PRAGMA user_version = 2")
         conn.commit()
         conn.close()

@@ -11,7 +11,7 @@ FILIAL = {"cnpj": "75315333000199", "cnpj_text": "75.315.333/0001-99"}
 
 
 class CatalogTests(ApiTestCase):
-    def test_formato_igual_ao_do_data_js(self):
+    def test_formato_da_resposta(self):
         self.write_legacy("stores.json", {"75315333": {"store": "Atacadão", "category": "Mercado"}})
         self.write_legacy("products.json", {"Detergente": [REF]})
         self.write_pdf("a.pdf", item("10", price="5,00"), number=7)
@@ -23,6 +23,7 @@ class CatalogTests(ApiTestCase):
             }],
             "suggestions": [],
             "rejections": [],
+            "price_ratio_warn": 1.5,
             "groups": {"Detergente": [REF]},
             "notes": {REF: [{
                 "date": "2026-10-02", "number": 7, "file": "a.pdf", "href": note_url(7),
@@ -74,8 +75,21 @@ class CatalogTests(ApiTestCase):
         self.assertEqual(self.catalog()["suggestions"][0]["warnings"],
                          ["unidades diferentes", "preços muito diferentes (2.00 a 4.00)"])
 
+    def test_mesmo_codigo_com_duas_unidades_ou_descricoes_nao_vira_sugestao(self):
+        self.add_note(item("1", "DETERGENTE YPE NEUTRO", unit="UND9"), number=1)
+        self.add_note(item("1", "DETERGENTE YPE NEUTRO", unit="KG9"), number=2)
+        self.add_note(item("1", "DETERGENTE YPE NEUTRA"), number=3)
+        self.assertEqual(self.catalog()["suggestions"], [])
+
+    def test_sugestao_lista_cada_referencia_uma_vez(self):
+        self.add_note(item("1", "QJO", unit="UND9"), item("2", "QJO"), number=1)
+        self.add_note(item("1", "QJO", unit="KG9"), number=2)
+        (suggestion,) = self.catalog()["suggestions"]
+        self.assertEqual(suggestion["refs"], ["75315333:1", "75315333:2"])
+
     def test_banco_vazio(self):
-        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": []})
+        self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": [],
+                                          "price_ratio_warn": 1.5})
 
     def test_recusa_outro_host(self):
         response = self.client().get("/api/catalog", headers={"Host": "evil.example"})

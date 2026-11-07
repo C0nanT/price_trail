@@ -41,6 +41,13 @@ class StoresApiTest(ApiTestCase):
             self.assertTrue(response.get_json()["error"])
         self.assertEqual(client.get("/api/stores").get_json()["stores"], [])
 
+    def test_put_sem_json_retorna_415_e_nada_muda(self):
+        client = self.client()
+        response = client.put("/api/stores/75315333", data='{"store": "A", "category": "B"}',
+                              content_type="text/plain")
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(client.get("/api/stores").get_json()["stores"], [])
+
     def test_loja_cadastrada_aparece_em_products(self):
         self.add_note(item("1"))
         client = self.client()

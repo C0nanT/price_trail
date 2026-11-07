@@ -1,6 +1,4 @@
 """Subcomandos export e restore: a curadoria sai num JSON estável e volta igual."""
-import contextlib
-import io
 import json
 import sqlite3
 import unittest
@@ -8,7 +6,7 @@ from unittest import mock
 
 from pricetrail import cli
 from pricetrail.db import SCHEMA
-from tests.api_case import ApiTestCase, item
+from tests.api_case import ApiTestCase, item, run_cli
 
 A, B, C = (f"75315333:{n}" for n in (1, 2, 3))
 
@@ -21,11 +19,8 @@ class ExportRestoreTests(ApiTestCase):
         self.addCleanup(patcher.stop)
         self.file = self.root / "curadoria.json"
 
-    def run_cli(self, command, *args, db=None):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = cli.main([command, "--db", str(db or self.db), "--data", str(self.data), *args])
-        return code, out.getvalue(), err.getvalue()
+    def run_cli(self, command, *args):
+        return run_cli(command, "--db", self.db, "--data", self.data, *args)
 
     def curate(self):
         web = self.client()

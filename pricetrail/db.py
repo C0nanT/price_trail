@@ -10,7 +10,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .nfce import ACCESS_KEY_RE, NoteError
+from .nfce import ACCESS_KEY_LINE_RE, NoteError
 from .pdfs import extract_text, find_pdfs, path_in_data
 
 BASE_STATEMENTS = (
@@ -95,7 +95,20 @@ CREATE TABLE group_refs (
 )
 
 
-CODE_REF_RE = re.compile(r"^(\d{8}):(\S+)$")
+# [0-9] e não \d, que aceitaria dígitos de outras escritas, como os de largura cheia.
+# Sem re.ASCII: com ele, \S aceitaria espaços que não são ASCII no código.
+CNPJ_ROOT_RE = re.compile(r"[0-9]{8}")
+CODE_REF_RE = re.compile(r"([0-9]{8}):(\S+)")
+
+
+def parse_ref(ref: object) -> tuple[str, str] | None:
+    """(raiz, código) de uma referência raiz:código; None se não for uma."""
+    match = CODE_REF_RE.fullmatch(ref) if isinstance(ref, str) else None
+    return (match[1], match[2]) if match else None
+
+
+def is_cnpj_root(text: object) -> bool:
+    return isinstance(text, str) and CNPJ_ROOT_RE.fullmatch(text) is not None
 
 
 class MigrationError(Exception):
@@ -117,28 +130,39 @@ def read_legacy_json(legacy_dir: Path | None, name: str) -> dict:
 
 def load_legacy_stores(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     stores = read_legacy_json(legacy_dir, "stores.json")
+    for root, entry in stores.items():
+        if not isinstance(entry, dict):
+            raise MigrationError(f'stores.json deve ser {{"raiz": {{"store": ..., "category": ...}}}}, veja {root!r}')
     conn.executemany(
         "INSERT INTO stores (cnpj_root, store, category) VALUES (?, ?, ?)",
         [(root, entry.get("store"), entry.get("category")) for root, entry in stores.items()],
     )
 
 
+def read_legacy_refs(file: str, name: str, refs: object) -> list[tuple[str, str]]:
+    """As referências de um grupo do JSON antigo como (raiz, código), sem repetição."""
+    if not isinstance(refs, list):
+        raise MigrationError(f'{file} deve ser {{"Nome": ["raiz:código", ...]}}, veja o grupo {name!r}')
+    parsed = []
+    for ref in refs:
+        if not (pair := parse_ref(ref)):
+            raise MigrationError(f"{file}: {ref!r} no grupo {name!r} não é uma referência raiz:código")
+        parsed.append(pair)
+    return list(dict.fromkeys(parsed))
+
+
 def load_legacy_groups(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     for name, refs in read_legacy_json(legacy_dir, "products.json").items():
-        if not isinstance(refs, list):
-            raise MigrationError(f'products.json deve ser {{"Nome": ["raiz:código", ...]}}, veja o grupo {name!r}')
+        parsed = read_legacy_refs("products.json", name, refs)
         group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
-        for ref in dict.fromkeys(refs):
-            match = CODE_REF_RE.match(ref)
-            if not match:
-                raise MigrationError(f"products.json: {ref!r} no grupo {name!r} não é uma referência raiz:código")
+        for root, code in parsed:
             try:
                 conn.execute(
                     "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
-                    (group_id, match[1], match[2]),
+                    (group_id, root, code),
                 )
             except sqlite3.IntegrityError as error:
-                raise MigrationError(f"products.json: {ref!r} está em mais de um grupo") from error
+                raise MigrationError(f"products.json: '{root}:{code}' está em mais de um grupo") from error
 
 
 def migration_1(conn: sqlite3.Connection, _data_dir: Path | None, legacy_dir: Path | None) -> None:
@@ -158,7 +182,7 @@ def index_pdfs(data_dir: Path) -> tuple[dict[str, Path], dict[str, Path]]:
     by_name: dict[str, Path] = {}
     for pdf in find_pdfs(data_dir):
         try:
-            match = ACCESS_KEY_RE.search(extract_text(pdf))
+            match = ACCESS_KEY_LINE_RE.search(extract_text(pdf))
         except (NoteError, OSError):
             match = None
         if match:
@@ -200,21 +224,10 @@ def canonical_pair(ref_a: tuple[str, str], ref_b: tuple[str, str]) -> tuple[str,
 def load_legacy_rejections(conn: sqlite3.Connection, legacy_dir: Path | None) -> None:
     """Cada grupo de products.rejected.json vira todos os pares entre suas referências."""
     for name, refs in read_legacy_json(legacy_dir, "products.rejected.json").items():
-        if not isinstance(refs, list):
-            raise MigrationError(
-                f'products.rejected.json deve ser {{"Nome": ["raiz:código", ...]}}, veja o grupo {name!r}'
-            )
-        parsed = []
-        for ref in dict.fromkeys(refs):
-            match = CODE_REF_RE.match(ref) if isinstance(ref, str) else None
-            if not match:
-                raise MigrationError(
-                    f"products.rejected.json: {ref!r} no grupo {name!r} não é uma referência raiz:código"
-                )
-            parsed.append((match[1], match[2]))
+        unique = read_legacy_refs("products.rejected.json", name, refs)
         conn.executemany(
             "INSERT OR IGNORE INTO rejected_pairs (cnpj_root_a, code_a, cnpj_root_b, code_b) VALUES (?, ?, ?, ?)",
-            [canonical_pair(a, b) for a, b in itertools.combinations(parsed, 2)],
+            [canonical_pair(a, b) for a, b in itertools.combinations(unique, 2)],
         )
 
 
@@ -235,8 +248,13 @@ CREATE TABLE rejected_pairs (
     load_legacy_rejections(conn, legacy_dir)
 
 
+def migration_4(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Índice de group_refs por grupo, para o join e o ON DELETE CASCADE de product_groups."""
+    conn.execute("CREATE INDEX group_refs_group_id ON group_refs (group_id)")
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2, migration_3)
+MIGRATIONS = (migration_1, migration_2, migration_3, migration_4)
 
 
 def user_version(conn: sqlite3.Connection) -> int:

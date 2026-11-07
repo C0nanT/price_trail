@@ -1,6 +1,7 @@
 """Linha de comando: python3 -m pricetrail <subcomando>."""
 import argparse
 import sys
+from contextlib import closing
 from pathlib import Path
 
 from .catalog import CurationFileError, export_curation, restore_curation
@@ -21,11 +22,8 @@ def serve(db: Path, data: Path, port: int) -> int:
 
 
 def export(db: Path, data: Path, out: Path) -> int:
-    conn = connect(db, data, PROJECT_DIR)
-    try:
+    with closing(connect(db, data, PROJECT_DIR)) as conn:
         text = export_curation(conn)
-    finally:
-        conn.close()
     out.write_text(text, encoding="utf-8")
     print(f"curadoria exportada para {out}")
     return 0
@@ -37,14 +35,12 @@ def restore(db: Path, data: Path, file: Path) -> int:
     except OSError as error:
         print(f"não foi possível ler {file}: {error}", file=sys.stderr)
         return 2
-    conn = connect(db, data, PROJECT_DIR)
-    try:
-        restore_curation(conn, text)
-    except CurationFileError as error:
-        print(f"arquivo de curadoria inválido, nada foi alterado: {error}", file=sys.stderr)
-        return 2
-    finally:
-        conn.close()
+    with closing(connect(db, data, PROJECT_DIR)) as conn:
+        try:
+            restore_curation(conn, text)
+        except CurationFileError as error:
+            print(f"arquivo de curadoria inválido, nada foi alterado: {error}", file=sys.stderr)
+            return 2
     print(f"curadoria restaurada de {file}")
     return 0
 
@@ -53,28 +49,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pricetrail", description="Histórico de preços de NFC-e.")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    importar = commands.add_parser("import", help="importa PDFs de NFC-e para o SQLite")
+    # Opções de todos os subcomandos: onde está o banco e a pasta dos PDFs.
+    paths = argparse.ArgumentParser(add_help=False)
+    paths.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
+    paths.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
+
+    importar = commands.add_parser("import", parents=[paths], help="importa PDFs de NFC-e para o SQLite")
     importar.add_argument("folder", nargs="?", type=Path, help="pasta a ler (padrão: a pasta de dados)")
-    importar.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
-    importar.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
     importar.add_argument("--log", type=Path, default=PROJECT_DIR / "pricetrail.log")
 
-    servir = commands.add_parser("serve", help="abre o gráfico e o agrupamento em um servidor local")
-    servir.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
-    servir.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
+    servir = commands.add_parser("serve", parents=[paths], help="abre o gráfico e o agrupamento em um servidor local")
     servir.add_argument("--port", type=int, default=8000)
 
-    exportar = commands.add_parser("export", help="grava grupos, pares rejeitados e lojas num JSON")
-    exportar.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
-    exportar.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
+    exportar = commands.add_parser("export", parents=[paths], help="grava grupos, pares rejeitados e lojas num JSON")
     exportar.add_argument("--out", type=Path, default=PROJECT_DIR / CURATION_FILE,
                           help=f"arquivo de saída (padrão: {CURATION_FILE})")
 
-    restaurar = commands.add_parser("restore", help="substitui a curadoria do banco pelo arquivo exportado")
+    restaurar = commands.add_parser("restore", parents=[paths],
+                                    help="substitui a curadoria do banco pelo arquivo exportado")
     restaurar.add_argument("file", nargs="?", type=Path, default=PROJECT_DIR / CURATION_FILE,
                            help=f"arquivo a ler (padrão: {CURATION_FILE})")
-    restaurar.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
-    restaurar.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
 
     args = parser.parse_args(argv)
     try:

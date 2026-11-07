@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from pricetrail import importer, nfce
+from pricetrail import cli, importer, nfce
 from pricetrail.db import connect
 from pricetrail.server import create_app
 from tests.fixtures import make_key, make_text
@@ -25,6 +25,14 @@ def note_text(*items, number=1, cnpj=CNPJ, cnpj_text=CNPJ_TEXT, issued="02/10/20
     total = f"{sum(int(i[5].replace(',', '')) for i in items) / 100:.2f}".replace(".", ",")
     return make_text(list(items), total=total, discount="", paid=total, number=number,
                      key=make_key(cnpj=cnpj, number=number), cnpj_text=cnpj_text, issued=issued)
+
+
+def run_cli(*args):
+    """Roda a linha de comando e devolve (código de saída, stdout, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = cli.main([str(arg) for arg in args])
+    return code, out.getvalue(), err.getvalue()
 
 
 def note_url(number=1, cnpj=CNPJ):

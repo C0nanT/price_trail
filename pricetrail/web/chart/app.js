@@ -2,7 +2,7 @@ let products = [];
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MARGIN = { top: 28, right: 28, bottom: 28, left: 48 };
 
-const el = (id) => document.getElementById(id);
+// el, money, dateFormat, normalize, fetchJson e showError vêm de /static/common.js.
 const search = el("search");
 const select = el("product");
 const categorySelect = el("category");
@@ -14,17 +14,12 @@ const ALL = "";
 const chart = el("chart");
 const tooltip = el("tooltip");
 
-const moneyFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const numberFormat = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const quantityFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 const percentFormat = new Intl.NumberFormat("pt-BR", {
   style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero",
 });
-const dateFormat = new Intl.DateTimeFormat("pt-BR");
 const shortDateFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
-
-const normalize = (text) =>
-  text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 
 function svgNode(name, attributes, parent) {
   const node = document.createElementNS(SVG_NS, name);
@@ -63,10 +58,13 @@ function dateBound(input, endOfDay) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-// Compras do produto dentro do intervalo de datas escolhido.
-function purchasesIn(product) {
-  const from = dateBound(fromInput, false);
-  const to = dateBound(toInput, true);
+// O intervalo de datas escolhido; calculado uma vez por filtragem, não por produto.
+function dateRange() {
+  return { from: dateBound(fromInput, false), to: dateBound(toInput, true) };
+}
+
+// Compras do produto dentro do intervalo de datas.
+function purchasesIn(product, { from, to }) {
   return product.purchases.filter((p) => (!from || p.date >= from) && (!to || p.date <= to));
 }
 
@@ -98,13 +96,13 @@ function sortMatches(entries) {
 
 function fillOptions() {
   const terms = normalize(search.value).split(/\s+/).filter(Boolean);
+  const range = dateRange();
   const entries = [];
   products.forEach((product, index) => {
     if (categorySelect.value && !product.categories.includes(categorySelect.value)) return;
     if (storeSelect.value && !product.stores.includes(storeSelect.value)) return;
-    const haystack = normalize(`${product.description} ${product.code} ${product.seller}`);
-    if (!terms.every((term) => haystack.includes(term))) return;
-    const purchases = purchasesIn(product);
+    if (!terms.every((term) => product.haystack.includes(term))) return;
+    const purchases = purchasesIn(product, range);
     if (!purchases.length) return;
     entries.push({ product, index, count: purchases.length, variation: variationOf(purchases) });
   });
@@ -133,7 +131,7 @@ function currentPrice() {
 function renderCheck(product) {
   const average = averageOf(product);
   const current = currentPrice();
-  el("average").textContent = moneyFormat.format(average);
+  el("average").textContent = money.format(average);
   const verdict = el("verdict");
   if (current === null) {
     verdict.textContent = "";
@@ -145,7 +143,7 @@ function renderCheck(product) {
     : diff < 0 ? "▼ Barato" : "▲ Caro";
   const detail = Math.abs(diff) <= NEAR_AVERAGE
     ? `${percent} ${diff < 0 ? "abaixo" : "acima"} da média`
-    : `${percent} ${diff < 0 ? "abaixo" : "acima"} da média de ${moneyFormat.format(average)}`;
+    : `${percent} ${diff < 0 ? "abaixo" : "acima"} da média de ${money.format(average)}`;
   verdict.replaceChildren(text, Object.assign(document.createElement("small"), { textContent: detail }));
 }
 
@@ -155,9 +153,9 @@ function renderTable(product) {
     const cells = [
       [dateFormat.format(purchase.date), ""],
       [purchase.seller, ""],
-      [moneyFormat.format(purchase.price), "number"],
+      [money.format(purchase.price), "number"],
       [`${quantityFormat.format(purchase.quantity)} ${product.unit}`, "number"],
-      [moneyFormat.format(purchase.total), "number"],
+      [money.format(purchase.total), "number"],
     ];
     for (const [text, className] of cells) {
       const cell = row.insertCell();
@@ -179,9 +177,9 @@ function labeledIndexes(purchases) {
 
 function showTooltip(product, purchase, x, plot) {
   const [price, date, detail] = tooltip.children;
-  price.textContent = `${moneyFormat.format(purchase.price)} / ${product.unit}`;
+  price.textContent = `${money.format(purchase.price)} / ${product.unit}`;
   date.textContent = dateFormat.format(purchase.date);
-  detail.textContent = `${quantityFormat.format(purchase.quantity)} ${product.unit} · ${moneyFormat.format(purchase.total)}`;
+  detail.textContent = `${quantityFormat.format(purchase.quantity)} ${product.unit} · ${money.format(purchase.total)}`;
   tooltip.hidden = false;
   const left = Math.max(0, Math.min(x + 12, plot.width - tooltip.offsetWidth));
   const flipped = x + 12 + tooltip.offsetWidth > plot.width;
@@ -311,7 +309,7 @@ function renderVariation(purchases) {
   node.replaceChildren(
     `${arrow} ${text} `,
     Object.assign(document.createElement("small"), {
-      textContent: `vs compra anterior (${moneyFormat.format(previous.price)} em ${dateFormat.format(previous.date)})`,
+      textContent: `vs compra anterior (${money.format(previous.price)} em ${dateFormat.format(previous.date)})`,
     }),
   );
 }
@@ -322,7 +320,7 @@ function render() {
   el("empty").hidden = Boolean(original);
   if (!original) return;
   // Todo o resto da página enxerga só as compras dentro do intervalo de datas.
-  const product = { ...original, purchases: purchasesIn(original) };
+  const product = { ...original, purchases: purchasesIn(original, dateRange()) };
   renderVariation(product.purchases);
   el("title").textContent = product.description;
   el("subtitle").textContent = `${product.seller} · código ${product.code} · preço por ${product.unit}, em R$`;
@@ -331,27 +329,17 @@ function render() {
   renderTable(product);
 }
 
-async function loadProducts() {
-  const response = await fetch("/api/products");
-  if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
-  return response.json();
-}
-
-function showError(error) {
-  el("error").textContent = `Não foi possível carregar os preços (${error.message}). `
-    + "Confira se o servidor está rodando e recarregue a página.";
-  el("error").hidden = false;
-}
-
 async function start() {
   try {
-    products = await loadProducts();
+    products = await fetchJson("/api/products");
   } catch (error) {
-    showError(error);
+    showError("os preços", error);
     return;
   }
   for (const product of products) {
     for (const purchase of product.purchases) purchase.date = new Date(purchase.issued_at);
+    // Texto da busca, normalizado uma vez só e não a cada tecla.
+    product.haystack = normalize(`${product.description} ${product.code} ${product.seller}`);
   }
 
   search.addEventListener("input", fillOptions);

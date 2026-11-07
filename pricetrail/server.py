@@ -79,6 +79,8 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
 
     @app.put("/api/stores/<cnpj_root>")
     def put_store(cnpj_root: str):
+        if not request.is_json:
+            return jsonify(error="Envie o corpo como application/json."), 415
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             body = {}

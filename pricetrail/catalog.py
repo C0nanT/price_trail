@@ -8,10 +8,12 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from .db import CODE_REF_RE, canonical_pair
+from .db import canonical_pair, is_cnpj_root, parse_ref
 from .pdfs import resolve_in_data
 
 SIMILAR_RATIO = 0.88
+# Maior preço sobre o menor acima disso vira aviso; a página de grupos lê o valor da API.
+PRICE_RATIO_WARN = 1.5
 
 # Linhas repetidas de um produto na mesma nota e com o mesmo preço viram uma compra.
 PURCHASES_QUERY = """
@@ -84,13 +86,14 @@ def normalize(text: str) -> str:
 
 
 def similar(a: str, b: str) -> bool:
-    """ratio() é lento e roda a cada request; os dois primeiros são limites superiores dele."""
+    """ratio() é lento e roda a cada request; os limites superiores dele vêm antes.
+
+    O primeiro é o de real_quick_ratio(), calculado sem montar o SequenceMatcher.
+    """
+    if 2 * min(len(a), len(b)) / (len(a) + len(b) or 1) <= SIMILAR_RATIO:
+        return False
     matcher = difflib.SequenceMatcher(None, a, b)
-    return (
-        matcher.real_quick_ratio() > SIMILAR_RATIO
-        and matcher.quick_ratio() > SIMILAR_RATIO
-        and matcher.ratio() > SIMILAR_RATIO
-    )
+    return matcher.quick_ratio() > SIMILAR_RATIO and matcher.ratio() > SIMILAR_RATIO
 
 
 def suggest_groups(rows: list[dict]) -> list[dict]:
@@ -100,24 +103,24 @@ def suggest_groups(rows: list[dict]) -> list[dict]:
     prices (lista), purchases (int). Sugere, na mesma loja: mesma descrição com
     códigos diferentes, e descrições quase iguais.
     """
-    by_store = defaultdict(list)
+    by_root = defaultdict(list)
     for row in rows:
-        by_store[row["cnpj"][:8]].append(row)
+        by_root[row["cnpj"][:8]].append(row)
 
     suggestions = []
-    for store, items in by_store.items():
+    for cnpj_root, items in by_root.items():
         by_description = defaultdict(list)
         for item in items:
             by_description[normalize(item["description"])].append(item)
         for description, members in sorted(by_description.items()):
             if len(members) > 1:
-                suggestions.append(_suggestion("mesma descrição", store, members))
+                suggestions.append(_suggestion("mesma descrição", cnpj_root, members))
         names = sorted(by_description)
         for index, a in enumerate(names):
             for b in names[index + 1 :]:
                 if similar(a, b):
                     suggestions.append(
-                        _suggestion("descrições parecidas", store, by_description[a] + by_description[b])
+                        _suggestion("descrições parecidas", cnpj_root, by_description[a] + by_description[b])
                     )
     return suggestions
 
@@ -127,18 +130,20 @@ def _warnings(members: list[dict]) -> list[str]:
     warnings = []
     if len({member["unit"] for member in members}) > 1:
         warnings.append("unidades diferentes")
-    if prices and max(prices) / min(prices) > 1.5:
+    if prices and max(prices) / min(prices) > PRICE_RATIO_WARN:
         warnings.append(f"preços muito diferentes ({min(prices):.2f} a {max(prices):.2f})")
     return warnings
 
 
-def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
+def _suggestion(reason: str, cnpj_root: str, members: list[dict]) -> dict:
     warnings = _warnings(members)
     first = min(members, key=lambda m: m["description"])
+    # Um código com duas descrições ou unidades é mais de uma linha, mas uma referência só.
+    codes = sorted({member["code"] for member in members})
     return {
         "reason": reason,
         "name": first["description"],
-        "refs": [f"{store}:{member['code']}" for member in sorted(members, key=lambda m: m["code"])],
+        "refs": [f"{cnpj_root}:{code}" for code in codes],
         "members": members,
         "warnings": warnings,
     }
@@ -170,7 +175,7 @@ def drop_rejected(suggestions: list[dict], rejected: set[tuple]) -> list[dict]:
         if len(refs) < 2 or key in seen:
             continue
         seen.add(key)
-        keep = {ref.split(":", 1)[1] for ref in refs}
+        keep = {split_ref(ref)[1] for ref in refs}
         members = [m for m in suggestion["members"] if m["code"] in keep]
         result.append({**suggestion, "refs": refs, "members": members, "warnings": _warnings(members)})
     return result
@@ -267,7 +272,7 @@ def validate_groups(pairs: list[tuple[str, object]]) -> list[tuple[str, list[str
         if not isinstance(refs, list) or not refs:
             raise GroupsError(f"O grupo “{name}” precisa de uma lista de produtos.")
         for ref in refs:
-            if not isinstance(ref, str) or not CODE_REF_RE.match(ref):
+            if not parse_ref(ref):
                 raise GroupsError(f"“{ref}” no grupo “{name}” não é uma referência raiz:código.")
             if owner.setdefault(ref, name) != name:
                 raise GroupsError(f"O produto {ref} está nos grupos “{owner[ref]}” e “{name}”.")
@@ -289,7 +294,7 @@ def _write_groups(conn: sqlite3.Connection, groups: list[tuple[str, list[str]]])
         group_id = conn.execute("INSERT INTO product_groups (name) VALUES (?)", (name,)).lastrowid
         conn.executemany(
             "INSERT INTO group_refs (group_id, cnpj_root, product_code) VALUES (?, ?, ?)",
-            [(group_id, *ref.split(":", 1)) for ref in refs],
+            [(group_id, *split_ref(ref)) for ref in refs],
         )
 
 
@@ -347,13 +352,13 @@ def list_stores(conn: sqlite3.Connection) -> dict:
     }
 
 
-def is_registered_store(conn: sqlite3.Connection, cnpj_root: str) -> bool:
-    return conn.execute("SELECT 1 FROM stores WHERE cnpj_root = ?", (cnpj_root,)).fetchone() is not None
+def registered_store_roots(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT cnpj_root FROM stores")}
 
 
 def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dict:
     """Cria ou atualiza a loja. Categoria vazia vira "Outros"."""
-    if not (len(cnpj_root) == 8 and cnpj_root.isascii() and cnpj_root.isdigit()):
+    if not is_cnpj_root(cnpj_root):
         raise StoreError("a raiz do CNPJ deve ter 8 dígitos")
     if not isinstance(store, str) or not store.strip():
         raise StoreError("o nome da loja não pode ser vazio")
@@ -387,6 +392,7 @@ def build_catalog(conn: sqlite3.Connection, data_dir: Path) -> dict:
         "groups": list_groups(conn),
         "notes": list_notes(conn, data_dir),
         "rejections": list_rejections(rejected),
+        "price_ratio_warn": PRICE_RATIO_WARN,
     }
 
 
@@ -397,10 +403,12 @@ class RejectionError(ValueError):
 def _pairs_between(refs) -> list[tuple]:
     if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
         raise RejectionError("envie uma lista de referências no formato raiz:código")
+    parsed = []
     for ref in refs:
-        if not CODE_REF_RE.match(ref):
+        if not (pair := parse_ref(ref)):
             raise RejectionError(f"{ref!r} não é uma referência raiz:código")
-    unique = [split_ref(ref) for ref in dict.fromkeys(refs)]
+        parsed.append(pair)
+    unique = list(dict.fromkeys(parsed))
     if len(unique) < 2:
         raise RejectionError("informe ao menos duas referências diferentes")
     return [canonical_pair(a, b) for a, b in itertools.combinations(unique, 2)]
@@ -480,20 +488,18 @@ def _parse_curation(text: str) -> tuple[list, list, list]:
     if not isinstance(data["rejected_pairs"], list):
         raise CurationFileError('"rejected_pairs" deve ser uma lista de [ref, ref]')
     for pair in data["rejected_pairs"]:
-        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(r, str) for r in pair)):
+        if not (isinstance(pair, list) and len(pair) == 2):
             raise CurationFileError(f"par rejeitado inválido: {pair!r}")
-        for ref in pair:
-            if not CODE_REF_RE.match(ref):
-                raise CurationFileError(f"{ref!r} não é uma referência raiz:código")
-        if pair[0] == pair[1]:
-            raise CurationFileError(f"par rejeitado com a mesma referência duas vezes: {pair[0]!r}")
-        pairs.append(canonical_pair(split_ref(pair[0]), split_ref(pair[1])))
+        try:
+            pairs += _pairs_between(pair)
+        except RejectionError as error:
+            raise CurationFileError(f"par rejeitado inválido {pair!r}: {error}") from error
 
     if not isinstance(data["stores"], dict):
         raise CurationFileError('"stores" deve ser {"raiz": {"store": ..., "category": ...}}')
     stores = []
     for root, entry in data["stores"].items():
-        if not (len(root) == 8 and root.isascii() and root.isdigit()):
+        if not is_cnpj_root(root):
             raise CurationFileError(f"raiz de CNPJ inválida em stores: {root!r}")
         if not isinstance(entry, dict):
             raise CurationFileError(f"a loja {root} deve ser um objeto com store e category")

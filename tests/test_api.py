@@ -172,6 +172,35 @@ class MigrationTests(ApiTestCase):
         self.write_legacy("products.json", {"A": "75315333:10"})
         self.assert_migration_fails("products.json")
 
+    def test_banco_na_versao_3_ganha_indice_dos_grupos_e_mantem_os_dados(self):
+        self.write_legacy("products.json", self.GROUPS)
+        self.add_note(item("10"))
+        conn = sqlite3.connect(self.db)
+        conn.execute("DROP INDEX group_refs_group_id")
+        conn.execute("PRAGMA user_version = 3")
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.products()[0]["description"], "Detergente")
+        conn = sqlite3.connect(self.db)
+        self.addCleanup(conn.close)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+        # O índice serve ao join dos grupos e ao ON DELETE CASCADE de product_groups.
+        plan = " ".join(row[3] for row in conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM group_refs WHERE group_id = 1"))
+        self.assertIn("USING INDEX group_refs_group_id", plan)
+
+    def test_referencia_que_nao_e_texto_aborta(self):
+        for ref in (12345678, ["75315333:10"]):
+            for name in ("products.json", "products.rejected.json"):
+                with self.subTest(ref=ref, name=name):
+                    self.write_legacy(name, {"A": [ref, "75315333:11"]})
+                    self.assert_migration_fails(name)
+                    (self.legacy / name).unlink()
+
+    def test_loja_que_nao_e_objeto_aborta(self):
+        self.write_legacy("stores.json", {"75315333": "Atacadão"})
+        self.assert_migration_fails("stores.json")
+
 
 class HostTests(ApiTestCase):
     def test_aceita_localhost_e_127_0_0_1_com_ou_sem_porta(self):
@@ -216,7 +245,9 @@ class ChartPageTests(ApiTestCase):
         self.assertIn("Histórico de preços", html)
         self.assertNotIn("PRODUTO QUE NAO VAI NO HTML", html)
         script = client.get("/static/chart/app.js").get_data(as_text=True)
-        self.assertIn('fetch("/api/products")', script)
+        self.assertIn('fetchJson("/api/products")', script)
+        self.assertIn('src="/static/common.js"', html)
+        self.assertIn("async function fetchJson", client.get("/static/common.js").get_data(as_text=True))
         self.assertEqual(client.get("/static/chart/style.css").status_code, 200)
 
     def test_pagina_tem_link_para_o_agrupamento(self):
@@ -234,7 +265,8 @@ class GroupPageTests(ApiTestCase):
         self.assertNotIn("PRODUTO QUE NAO VAI NO HTML", html)
         self.assertNotIn("data.js", html)
         script = client.get("/static/group/app.js").get_data(as_text=True)
-        self.assertIn('fetch("/api/catalog")', script)
+        self.assertIn('fetchJson("/api/catalog")', script)
+        self.assertIn('src="/static/common.js"', html)
         self.assertEqual(client.get("/static/group/style.css").status_code, 200)
 
     def test_pagina_tem_link_para_o_grafico_e_area_de_erro(self):

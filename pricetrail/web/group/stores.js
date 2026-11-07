@@ -1,6 +1,6 @@
 "use strict";
 // Seção "Lojas": cadastro de nome e categoria por raiz de CNPJ (GET /api/stores, PUT /api/stores/<raiz>).
-// Independente do restante da página: usa só os helpers `el` e `make` de app.js.
+// Independente do restante da página: usa só `make` de app.js e `el` e `fetchJson` de common.js.
 
 function storeRow(root, name, store, category, hint) {
   const nameInput = make("input", { value: store, placeholder: name, "aria-label": `Nome da loja ${root}` });
@@ -10,20 +10,16 @@ function storeRow(root, name, store, category, hint) {
   const submit = async () => {
     message.textContent = "";
     try {
-      const response = await fetch(`/api/stores/${root}`, {
+      await fetchJson(`/api/stores/${root}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store: nameInput.value, category: categoryInput.value }),
+        body: { store: nameInput.value, category: categoryInput.value },
       });
-      if (response.status === 422) {
-        message.textContent = (await response.json()).error;
-        return;
-      }
-      if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
-      await loadStores();
     } catch (error) {
-      message.textContent = `Não consegui salvar (${error.message})`;
+      // 422 é cadastro inválido: a mensagem da API já diz o que corrigir.
+      message.textContent = error.status === 422 ? error.message : `Não consegui salvar (${error.message})`;
+      return;
     }
+    await loadStores();
   };
   save.addEventListener("click", submit);
   for (const input of [nameInput, categoryInput]) {
@@ -44,10 +40,9 @@ function renderStores(data) {
 
 async function loadStores() {
   try {
-    const response = await fetch("/api/stores");
-    if (!response.ok) throw new Error(`a API respondeu ${response.status}`);
+    const data = await fetchJson("/api/stores");
     el("stores-error").hidden = true;
-    renderStores(await response.json());
+    renderStores(data);
   } catch (error) {
     el("stores-error").textContent = `Não foi possível carregar as lojas (${error.message}).`;
     el("stores-error").hidden = false;
