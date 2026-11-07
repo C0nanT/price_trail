@@ -3,6 +3,15 @@ PORT   ?= 8000
 TAILWIND ?= bin/tailwindcss
 CSS_ARGS = -c tailwind.config.js -i tailwind/input.css -o pricetrail/web/app.css
 
+# Carrega o .env local, se existir (login do `make serve`; modelo em .env.example).
+# O hash vem entre aspas simples por causa do Compose e tem `$`, que o make
+# expandiria: lido cru com $(value) e sem as aspas.
+ifneq (,$(wildcard .env))
+include .env
+AUTH_PASSWORD_HASH := $(patsubst '%',%,$(value AUTH_PASSWORD_HASH))
+export
+endif
+
 .PHONY: help install import serve export restore test css css-watch
 
 help:

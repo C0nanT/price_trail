@@ -19,6 +19,12 @@ CURATION_FILE = "curadoria.json"
 DEFAULT_LOG = PROJECT_DIR / "pricetrail.log"
 
 
+def env_paths() -> tuple[Path, Path]:
+    """Banco e pasta dos PDFs: DB_PATH e DATA_DIR, senão os padrões na pasta do projeto."""
+    return (Path(os.environ.get("DB_PATH") or PROJECT_DIR / "pricetrail.sqlite"),
+            Path(os.environ.get("DATA_DIR") or PROJECT_DIR / "data"))
+
+
 def serve(db: Path, data: Path, port: int) -> int:
     configure_server_logging()
     app = create_app(db, data, PROJECT_DIR)
@@ -71,8 +77,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Opções de todos os subcomandos: onde está o banco e a pasta dos PDFs.
     paths = argparse.ArgumentParser(add_help=False)
-    paths.add_argument("--db", type=Path, default=Path(os.environ.get("DB_PATH") or PROJECT_DIR / "pricetrail.sqlite"))
-    paths.add_argument("--data", type=Path, default=Path(os.environ.get("DATA_DIR") or PROJECT_DIR / "data"), help="pasta de dados, com os PDFs")
+    default_db, default_data = env_paths()
+    paths.add_argument("--db", type=Path, default=default_db)
+    paths.add_argument("--data", type=Path, default=default_data, help="pasta de dados, com os PDFs")
 
     importar = commands.add_parser("import", parents=[paths], help="importa PDFs de NFC-e para o SQLite")
     importar.add_argument("folder", nargs="?", type=Path, help="pasta a ler (padrão: a pasta de dados)")

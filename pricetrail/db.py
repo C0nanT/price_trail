@@ -276,13 +276,17 @@ def migrate(conn: sqlite3.Connection, data_dir: Path | None, legacy_dir: Path | 
             conn.execute(f"PRAGMA user_version = {version}")
 
 
+# Quanto uma conexão espera por outra que está escrevendo antes de dar "database is locked".
+BUSY_TIMEOUT_MS = 5000
+
+
 def open_connection(path: Path) -> sqlite3.Connection:
     """Abre o banco com os PRAGMAs de toda conexão, sem criar pasta nem migrar."""
     conn = sqlite3.connect(path)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
         conn.execute("PRAGMA foreign_keys = ON")
     except BaseException:
         conn.close()
