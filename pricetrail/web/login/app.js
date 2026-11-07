@@ -13,6 +13,13 @@ async function session() {
   return response.json();
 }
 
+function minutesText(minutes) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
 function showError(message) {
   error.textContent = message;
   error.hidden = false;
@@ -35,7 +42,17 @@ async function submit(event) {
       location.replace(data?.next || "/");
       return;
     }
-    showError(data?.error || `O servidor respondeu ${response.status}.`);
+    if (response.status === 429) {
+      // Bloqueado (este IP ou o teto global): nem a senha certa entra até o prazo acabar.
+      showError(data?.minutesLeft
+        ? `Muitas tentativas erradas. Tente de novo em ${minutesText(data.minutesLeft)}.`
+        : data?.error || "Muitas tentativas erradas. Tente de novo mais tarde.");
+    } else if (response.status === 401 && data?.lockMinutesIfWrong) {
+      // Esta era a última tentativa: o erro acabou de bloquear o login.
+      showError(`${data.error} Essa era a última tentativa: o login fica bloqueado por ${minutesText(data.lockMinutesIfWrong)}.`);
+    } else {
+      showError(data?.error || `O servidor respondeu ${response.status}.`);
+    }
     form.password.value = "";
     form.password.focus();
   } catch (failure) {

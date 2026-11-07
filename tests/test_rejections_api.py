@@ -104,6 +104,8 @@ class RejectionMigrationTests(ApiTestCase):
         conn = sqlite3.connect(self.db)
         conn.execute("DROP TABLE rejected_pairs")
         conn.execute("DROP INDEX group_refs_group_id")
+        conn.execute("DROP TABLE login_attempts")
+        conn.execute("DROP TABLE login_failures")
         conn.execute("PRAGMA user_version = 2")
         conn.commit()
         conn.close()

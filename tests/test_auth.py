@@ -77,6 +77,7 @@ class LoginTests(ApiTestCase):
         self.assertEqual(client.get("/api/products").status_code, 200)
         self.assertTrue(client.get("/api/session").get_json()["loggedIn"])
 
+    @mock.patch("pricetrail.login_limit.GLOBAL_MAX_FAILURES", 100)  # todo login conta no teto global de 10
     def test_next_externo_ou_ausente_vira_a_raiz(self):
         for next in (None, "", "//evil.com", "//evil.com/lista", "https://evil.com/", "http:/evil.com",
                      "/\\evil.com", "lista", "javascript:alert(1)", "/a\nb", 5):
@@ -87,10 +88,11 @@ class LoginTests(ApiTestCase):
 
     def test_usuario_errado_e_senha_errada_dao_a_mesma_resposta_401(self):
         responses = [
-            self.login(self.anon_client(), username="outro"),
-            self.login(self.anon_client(), password="errada"),
-            self.login(self.anon_client(), username="outro", password="errada"),
-            self.login(self.anon_client(), username=None, password=None),
+            # Um IP por tentativa: a terceira falha do mesmo IP já viria com o aviso de bloqueio.
+            self.login(self.anon_client("203.0.113.1"), username="outro"),
+            self.login(self.anon_client("203.0.113.2"), password="errada"),
+            self.login(self.anon_client("203.0.113.3"), username="outro", password="errada"),
+            self.login(self.anon_client("203.0.113.4"), username=None, password=None),
         ]
         for response in responses:
             self.assertEqual(response.status_code, 401)
