@@ -146,6 +146,15 @@ são (eles deixam de ser sugeridos). Cada alteração é salva direto no banco; 
 servidor recusar, a página mostra o motivo e mantém a edição na tela. O gráfico reflete
 os grupos ao recarregar.
 
+**Depois de editar grupos, rejeições ou lojas, atualize o backup.** O banco não vai para
+o git; o `curadoria.json` vai:
+
+```bash
+python3 -m pricetrail export
+git add curadoria.json
+git commit -m "Atualiza curadoria"
+```
+
 Cada referência é um código de loja (`75315333:11757`, 8 dígitos do CNPJ + código).
 Produtos com unidades diferentes não são juntados.
 
