@@ -173,14 +173,31 @@ def import_upload(
 
     O conteúdo vai antes para um temporário na própria pasta de dados, e o rename
     final é atômico. Fora a nota nova, o temporário é apagado.
+    Falha inesperada (disco, banco) vira ERRO deste arquivo, com o detalhe no log,
+    e não derruba o envio dos outros.
     """
+    log = logging.getLogger("pricetrail")
+    try:
+        return _import_upload(conn, name, content, data_dir, known_roots, log)
+    except Exception:
+        log.exception("upload %s: erro inesperado", name)
+        return ImportResult(ERROR, name, "erro inesperado", unexpected=True)
+
+
+def _import_upload(
+    conn: sqlite3.Connection,
+    name: str,
+    content: BinaryIO,
+    data_dir: Path,
+    known_roots: set[str],
+    log: logging.Logger,
+) -> ImportResult:
     data_dir.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=data_dir, prefix=".", suffix=UPLOAD_SUFFIX)
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "wb") as out:
             shutil.copyfileobj(content, out)
-        log = logging.getLogger("pricetrail")
         log.info("upload: %s", name)
         if not has_pdf_signature(tmp):
             log.error("upload %s: não é um PDF", name)

@@ -2,6 +2,7 @@
 import io
 from unittest import mock
 
+from pricetrail import importer
 from pricetrail.server import create_app
 from tests.api_case import ApiTestCase, item, note_text, note_url, run_cli
 from tests.fixtures import make_key
@@ -221,3 +222,44 @@ class UploadFileCaseTests(UploadTestCase):
         self.assertEqual(response.get_json()["results"][0]["status"], "NOVA")
         self.assertEqual(existing.read_text(encoding="utf-8"), "conteudo antigo")
         self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])
+
+    def test_falha_inesperada_ao_gravar_um_arquivo_vira_erro_e_os_outros_seguem(self):
+        real_save = importer.save_note
+
+        def save_note(conn, note, source_file):
+            if source_file == "quebra.pdf":
+                raise OSError("disco cheio")
+            return real_save(conn, note, source_file)
+
+        with mock.patch("pricetrail.importer.save_note", save_note):
+            response = self.upload(
+                ("a.pdf", note_text(item("10"), number=1)),
+                ("quebra.pdf", note_text(item("20"), number=2)),
+                ("b.pdf", note_text(item("30"), number=3, issued="05/10/2026")),
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual([(r["name"], r["status"]) for r in body["results"]],
+                         [("a.pdf", "NOVA"), ("quebra.pdf", "ERRO"), ("b.pdf", "NOVA")])
+        self.assertTrue(body["results"][1]["unexpected"])
+        self.assertEqual(body["results"][1]["message"], "erro inesperado")
+        self.assertEqual(body["summary"], {"new": 2, "existing": 0, "error": 1})
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf", f"2026-10-05_{make_key(number=3)}.pdf"])
+
+    def test_falha_inesperada_ao_mover_o_pdf_vira_erro_sem_temporario(self):
+        with mock.patch("pathlib.Path.replace", side_effect=OSError("sem permissão")):
+            response = self.upload(("a.pdf", note_text(item("10"), number=1)))
+        self.assertEqual(response.status_code, 200)
+        (result,) = response.get_json()["results"]
+        self.assertEqual(result["status"], "ERRO")
+        self.assertTrue(result["unexpected"])
+        self.assertEqual(result["message"], "erro inesperado")
+        self.assertEqual(self.data_files(), [])
+
+    def test_mais_de_50_arquivos_por_envio_retorna_422(self):
+        files = [(f"n{i}.pdf", note_text(item("10"), number=i + 1)) for i in range(51)]
+        response = self.upload(*files)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("50", response.get_json()["error"])
+        self.assertEqual(self.products(), [])
+        self.assertEqual(self.data_files(), [])

@@ -5,8 +5,11 @@ from tests.api_case import ApiTestCase
 class PagesTest(ApiTestCase):
     def html(self, path):
         response = self.client().get(path)
-        self.assertEqual(response.status_code, 200, path)
-        return response.get_data(as_text=True)
+        try:
+            self.assertEqual(response.status_code, 200, path)
+            return response.get_data(as_text=True)
+        finally:
+            response.close()
 
     def test_paginas_e_estaticos_do_import_respondem_200(self):
         self.html("/import")

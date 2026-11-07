@@ -15,6 +15,7 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 ALLOWED_HOSTS = {"localhost", "127.0.0.1"}
 ACCESS_KEY_RE = re.compile(r"[0-9]{44}")
 MAX_UPLOAD_MB = 20
+MAX_UPLOAD_FILES = 50
 APP_HEADER = "X-Pricetrail"  # enviado pela página /import
 SUMMARY_KEYS = {importer.NEW: "new", importer.EXISTING: "existing", importer.ERROR: "error"}
 
@@ -142,6 +143,10 @@ def create_app(
         files = [file for file in request.files.getlist("files") if file.filename]
         if not files:
             return jsonify(error="Nenhum arquivo recebido: escolha um ou mais PDFs de NFC-e."), 422
+        if len(files) > MAX_UPLOAD_FILES:
+            return jsonify(
+                error=f"{len(files)} arquivos num envio só: o limite é {MAX_UPLOAD_FILES}; envie em partes."
+            ), 422
         conn = db()
         known_roots = catalog.registered_store_roots(conn)
         results = [

@@ -50,6 +50,8 @@ function uploadErrorMessage(error) {
     422: error.message,
   };
   if (error.status === undefined) return "Nada foi importado: não consegui falar com o servidor. Confira se ele está rodando.";
+  // 5xx: o servidor pode ter gravado parte dos arquivos antes de falhar.
+  if (error.status >= 500) return "O servidor falhou no meio do envio; confira o resultado no gráfico antes de reenviar.";
   return `Nada foi importado: ${reasons[error.status] || error.message}`;
 }
 
