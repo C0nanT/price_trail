@@ -11,9 +11,13 @@ KEY = make_key(number=1)
 
 
 class UploadTestCase(ApiTestCase):
-    def upload(self, *files, headers=UPLOAD_HEADERS, client=None):
-        """Envia (nome, conteúdo) como a página envia: multipart com o campo files repetido."""
-        data = {"files": [(io.BytesIO(content.encode("utf-8")), name) for name, content in files]}
+    def upload(self, *files, headers=UPLOAD_HEADERS, client=None, signed=True):
+        """Envia (nome, conteúdo) como a página envia: multipart com o campo files repetido.
+
+        O conteúdo ganha a assinatura de PDF, que o falso pdftotext descarta.
+        """
+        prefix = "%PDF-" if signed else ""
+        data = {"files": [(io.BytesIO((prefix + content).encode("utf-8")), name) for name, content in files]}
         return (client or self.client()).post("/api/import", data=data, headers=headers,
                                               content_type="multipart/form-data")
 
@@ -154,7 +158,7 @@ class UploadTests(UploadTestCase):
         log = self.root / "servidor.log"
 
         def fake_run(app, **_kwargs):
-            app.test_client().post("/api/import", data={"files": [(io.BytesIO(b"corrompido"), "ruim.pdf")]},
+            app.test_client().post("/api/import", data={"files": [(io.BytesIO(b"%PDF-corrompido"), "ruim.pdf")]},
                                    headers=UPLOAD_HEADERS, content_type="multipart/form-data")
 
         with mock.patch("flask.Flask.run", fake_run):
@@ -166,3 +170,54 @@ class UploadTests(UploadTestCase):
         (self.data / ".tmpabc.upload").write_text(note_text(item("10"), number=1), encoding="utf-8")
         self.import_data()
         self.assertEqual(self.products(), [])
+
+
+class UploadFileCaseTests(UploadTestCase):
+    def test_nota_existente_sem_pdf_tem_arquivo_gravado_e_link_religado(self):
+        self.add_note(item("10"), number=1, issued="02/10/2026")
+        self.assertIsNone(self.catalog()["notes"]["75315333:10"][0]["href"])
+        response = self.upload(("compra.pdf", note_text(item("10"), number=1, issued="02/10/2026")))
+        (result,) = response.get_json()["results"]
+        self.assertEqual(result["status"], "JÁ TEM")
+        self.assertIn("PDF religado", result["message"])
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])
+        (note,) = self.catalog()["notes"]["75315333:10"]
+        self.assertEqual(note["href"], note_url(1))
+
+    def test_nota_existente_com_arquivo_ausente_tem_pdf_religado(self):
+        client = self.client()
+        self.upload(("a.pdf", note_text(item("10"), number=1)), client=client)
+        (self.data / f"2026-10-02_{KEY}.pdf").unlink()
+        self.assertIsNone(self.catalog()["notes"]["75315333:10"][0]["href"])
+        (result,) = self.upload(("b.pdf", note_text(item("10"), number=1)), client=client).get_json()["results"]
+        self.assertEqual(result["status"], "JÁ TEM")
+        self.assertIn("PDF religado", result["message"])
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])
+        self.assertEqual(self.catalog()["notes"]["75315333:10"][0]["href"], note_url(1))
+
+    def test_mesma_nota_duas_vezes_no_envio_grava_um_arquivo(self):
+        response = self.upload(("a.pdf", note_text(item("10"), number=1)),
+                               ("b.pdf", note_text(item("10"), number=1)))
+        body = response.get_json()
+        self.assertEqual([r["status"] for r in body["results"]], ["NOVA", "JÁ TEM"])
+        self.assertEqual(body["summary"], {"new": 1, "existing": 1, "error": 0})
+        self.assertNotIn("religado", body["results"][1].get("message") or "")
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])
+
+    def test_conteudo_sem_assinatura_de_pdf_e_recusado_sem_chamar_o_parser(self):
+        response = self.upload(("texto.pdf", note_text(item("10"), number=1)), signed=False)
+        (result,) = response.get_json()["results"]
+        self.assertEqual(result["status"], "ERRO")
+        self.assertEqual(result["message"], "não é um PDF")
+        self.assertEqual(response.get_json()["summary"], {"new": 0, "existing": 0, "error": 1})
+        self.assertEqual(self.pdftotext_calls, [])
+        self.assertEqual(self.data_files(), [])
+        self.assertEqual(self.products(), [])
+
+    def test_nome_padronizado_ja_em_disco_nao_e_sobrescrito(self):
+        existing = self.data / f"2026-10-02_{KEY}.pdf"
+        existing.write_text("conteudo antigo", encoding="utf-8")
+        response = self.upload(("a.pdf", note_text(item("10"), number=1)))
+        self.assertEqual(response.get_json()["results"][0]["status"], "NOVA")
+        self.assertEqual(existing.read_text(encoding="utf-8"), "conteudo antigo")
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])

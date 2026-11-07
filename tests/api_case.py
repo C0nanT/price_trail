@@ -57,7 +57,7 @@ class ApiTestCase(unittest.TestCase):
 
     def fake_pdftotext(self, command, **_kwargs):
         self.pdftotext_calls.append(command)
-        text = Path(command[2]).read_text(encoding="utf-8")
+        text = Path(command[2]).read_text(encoding="utf-8").removeprefix("%PDF-")
         return subprocess.CompletedProcess(command, 1 if text == "corrompido" else 0, text, "erro de leitura")
 
     def write_legacy(self, name, content):

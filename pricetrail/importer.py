@@ -12,7 +12,7 @@ from typing import BinaryIO
 from .catalog import registered_store_roots
 from .db import connect
 from .nfce import Note, NoteError, parse_note
-from .pdfs import extract_text, find_pdfs, path_in_data
+from .pdfs import extract_text, find_pdfs, path_in_data, resolve_in_data
 
 
 def save_note(conn: sqlite3.Connection, note: Note, source_file: str) -> bool:
@@ -153,6 +153,19 @@ def import_file(conn: sqlite3.Connection, path: Path, data_dir: Path, known_root
 UPLOAD_SUFFIX = ".upload"  # sem .pdf: a importação pela pasta não lê o temporário
 
 
+PDF_SIGNATURE = b"%PDF-"
+
+
+def has_pdf_signature(path: Path) -> bool:
+    with path.open("rb") as file:
+        return file.read(len(PDF_SIGNATURE)) == PDF_SIGNATURE
+
+
+def note_has_pdf(conn: sqlite3.Connection, access_key: str, data_dir: Path) -> bool:
+    row = conn.execute("SELECT source_path FROM notes WHERE access_key = ?", (access_key,)).fetchone()
+    return row is not None and resolve_in_data(row["source_path"], data_dir) is not None
+
+
 def import_upload(
     conn: sqlite3.Connection, name: str, content: BinaryIO, data_dir: Path, known_roots: set[str]
 ) -> ImportResult:
@@ -167,12 +180,21 @@ def import_upload(
     try:
         with os.fdopen(fd, "wb") as out:
             shutil.copyfileobj(content, out)
-        logging.getLogger("pricetrail").info("upload: %s", name)
+        log = logging.getLogger("pricetrail")
+        log.info("upload: %s", name)
+        if not has_pdf_signature(tmp):
+            log.error("upload %s: não é um PDF", name)
+            return ImportResult(ERROR, name, "não é um PDF")
         result = read_and_save(conn, tmp, name, f"upload {name}", known_roots)
-        if result.status == NEW:
-            final = data_dir / f"{result.issued_at[:10]}_{result.access_key}.pdf"
-            tmp.replace(final)
+        if result.status == ERROR:
+            return result
+        final = data_dir / f"{result.issued_at[:10]}_{result.access_key}.pdf"
+        if result.status == NEW or not note_has_pdf(conn, result.access_key, data_dir):
+            if not final.exists():
+                tmp.replace(final)
             update_source_path(conn, result.access_key, final.name)
+            if result.status == EXISTING:
+                result.message = "PDF religado à nota"
         return result
     finally:
         tmp.unlink(missing_ok=True)
