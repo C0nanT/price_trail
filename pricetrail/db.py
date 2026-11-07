@@ -238,8 +238,13 @@ CREATE TABLE rejected_pairs (
     load_legacy_rejections(conn, legacy_dir)
 
 
+def migration_4(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Índice de group_refs por grupo, para o join e o ON DELETE CASCADE de product_groups."""
+    conn.execute("CREATE INDEX group_refs_group_id ON group_refs (group_id)")
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2, migration_3)
+MIGRATIONS = (migration_1, migration_2, migration_3, migration_4)
 
 
 def user_version(conn: sqlite3.Connection) -> int:

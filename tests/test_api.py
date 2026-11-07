@@ -172,6 +172,23 @@ class MigrationTests(ApiTestCase):
         self.write_legacy("products.json", {"A": "75315333:10"})
         self.assert_migration_fails("products.json")
 
+    def test_banco_na_versao_3_ganha_indice_dos_grupos_e_mantem_os_dados(self):
+        self.write_legacy("products.json", self.GROUPS)
+        self.add_note(item("10"))
+        conn = sqlite3.connect(self.db)
+        conn.execute("DROP INDEX group_refs_group_id")
+        conn.execute("PRAGMA user_version = 3")
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.products()[0]["description"], "Detergente")
+        conn = sqlite3.connect(self.db)
+        self.addCleanup(conn.close)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+        # O índice serve ao join dos grupos e ao ON DELETE CASCADE de product_groups.
+        plan = " ".join(row[3] for row in conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM group_refs WHERE group_id = 1"))
+        self.assertIn("USING INDEX group_refs_group_id", plan)
+
     def test_referencia_que_nao_e_texto_aborta(self):
         self.write_legacy("products.json", {"A": [12345678]})
         self.assert_migration_fails("12345678")
