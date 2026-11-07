@@ -276,16 +276,29 @@ def migrate(conn: sqlite3.Connection, data_dir: Path | None, legacy_dir: Path | 
             conn.execute(f"PRAGMA user_version = {version}")
 
 
+def open_connection(path: Path) -> sqlite3.Connection:
+    """Abre o banco com os PRAGMAs de toda conexão, sem criar pasta nem migrar."""
+    conn = sqlite3.connect(path)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA foreign_keys = ON")
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
 def connect(path: Path, data_dir: Path | None = None, legacy_dir: Path | None = None) -> sqlite3.Connection:
-    """Abre o banco, liga as chaves estrangeiras e aplica as migrações pendentes.
+    """Abre o banco (criando a pasta, se faltar), liga WAL, busy_timeout e as chaves estrangeiras e aplica as migrações pendentes.
 
     data_dir é a pasta dos PDFs e legacy_dir a dos JSONs da curadoria antiga. As
     duas só são lidas pelas migrações que fazem a carga inicial: o banco já migrado
     não as usa. Migrar um banco com notas sem data_dir levanta MigrationError.
     """
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = open_connection(path)
     try:
         migrate(conn, data_dir, legacy_dir)
     except BaseException:

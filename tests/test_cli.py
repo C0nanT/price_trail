@@ -1,6 +1,8 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from pricetrail import nfce
 from tests.api_case import run_cli
@@ -21,6 +23,21 @@ class ImportCommandTest(unittest.TestCase):
             code, _, err = run_cli("import", tmp / "nada", "--db", tmp / "t.sqlite", "--log", tmp / "t.log")
             self.assertEqual(code, 2)
             self.assertIn("pasta não encontrada", err)
+
+
+class AmbienteTest(unittest.TestCase):
+    def test_env_define_banco_e_pasta_de_dados_e_argumento_ganha(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "dados").mkdir()
+            env = {"DB_PATH": str(tmp / "env.sqlite"), "DATA_DIR": str(tmp / "dados")}
+            with mock.patch.dict(os.environ, env):
+                code, out, _ = run_cli("import", "--log", tmp / "t.log")
+                self.assertEqual(code, 0)
+                self.assertIn("0 novas", out)
+                self.assertTrue((tmp / "env.sqlite").exists())
+                run_cli("import", "--db", tmp / "arg.sqlite", "--log", tmp / "t.log")
+                self.assertTrue((tmp / "arg.sqlite").exists())
 
 
 class ParserIndependenteTest(unittest.TestCase):

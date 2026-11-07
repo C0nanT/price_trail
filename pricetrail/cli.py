@@ -1,5 +1,6 @@
 """Linha de comando: python3 -m pricetrail <subcomando>."""
 import argparse
+import os
 import sys
 from contextlib import closing
 from pathlib import Path
@@ -53,8 +54,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Opções de todos os subcomandos: onde está o banco e a pasta dos PDFs.
     paths = argparse.ArgumentParser(add_help=False)
-    paths.add_argument("--db", type=Path, default=PROJECT_DIR / "pricetrail.sqlite")
-    paths.add_argument("--data", type=Path, default=PROJECT_DIR / "data", help="pasta de dados, com os PDFs")
+    paths.add_argument("--db", type=Path, default=Path(os.environ.get("DB_PATH") or PROJECT_DIR / "pricetrail.sqlite"))
+    paths.add_argument("--data", type=Path, default=Path(os.environ.get("DATA_DIR") or PROJECT_DIR / "data"), help="pasta de dados, com os PDFs")
 
     importar = commands.add_parser("import", parents=[paths], help="importa PDFs de NFC-e para o SQLite")
     importar.add_argument("folder", nargs="?", type=Path, help="pasta a ler (padrão: a pasta de dados)")
