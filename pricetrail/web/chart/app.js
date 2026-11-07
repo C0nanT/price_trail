@@ -304,6 +304,8 @@ function renderChart(product) {
     const x = xOf(times[index]);
     const y = yOf(purchase.price);
     const point = svgNode("g", { class: "point", tabindex: 0 }, svg);
+    // Área de toque de 44px em volta do ponto visível.
+    svgNode("circle", { cx: x, cy: y, r: 22, fill: "transparent" }, point);
     svgNode("circle", {
       class: "dot", cx: x, cy: y, r: 5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2,
     }, point);
@@ -315,16 +317,27 @@ function renderChart(product) {
     point.addEventListener("blur", () => hideTooltip(plot));
   });
 
-  svg.addEventListener("pointermove", (event) => {
+  const nearestTo = (event) => {
     const pointerX = event.clientX - svg.getBoundingClientRect().left;
     let nearest = 0;
     times.forEach((time, index) => {
       if (Math.abs(xOf(time) - pointerX) < Math.abs(xOf(times[nearest]) - pointerX)) nearest = index;
     });
     showTooltip(product, purchases[nearest], xOf(times[nearest]), plot);
-  });
-  svg.addEventListener("pointerleave", () => hideTooltip(plot));
+  };
+  // preventDefault no toque evita que o blur de um ponto focado feche o tooltip recém-aberto.
+  // Mouse: acompanha o ponteiro. Toque: abre ao tocar e fica aberto até tocar fora.
+  svg.addEventListener("pointermove", (event) => { if (event.pointerType === "mouse") nearestTo(event); });
+  svg.addEventListener("pointerdown", (event) => { if (event.pointerType !== "mouse") { event.preventDefault(); nearestTo(event); } });
+  svg.addEventListener("pointerleave", (event) => { if (event.pointerType === "mouse") hideTooltip(plot); });
+  closeTooltip = () => hideTooltip(plot);
 }
+
+// Toque fora do gráfico fecha o tooltip aberto por toque.
+let closeTooltip = () => {};
+document.addEventListener("pointerdown", (event) => {
+  if (!chart.contains(event.target)) closeTooltip();
+});
 
 function renderVariation(purchases) {
   const node = el("variation");

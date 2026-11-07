@@ -113,3 +113,11 @@ class PagesTest(ApiTestCase):
                     self.assertIn(cls, css)
             response.close()
         self.assertEqual(self.client().get("/static/group/style.css").status_code, 404)
+
+    def test_grafico_serve_elementos_que_o_js_usa_e_tabela_com_as_cinco_colunas(self):
+        body = self.html("/")
+        for hook in ('id="chart"', 'id="tooltip"', 'id="cards"', 'id="rows"'):
+            self.assertIn(hook, body)
+        table = body[body.index("<table"):body.index("</table>")]
+        for column in ("Data", "Loja", "Preço", "Quantidade", "Total"):
+            self.assertIn(f">{column}</th>", table)
