@@ -253,8 +253,25 @@ def migration_4(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: P
     conn.execute("CREATE INDEX group_refs_group_id ON group_refs (group_id)")
 
 
+def migration_5(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Tentativas de login (ver login_limit): por IP e os instantes de falha da janela global. Tempos em epoch (s)."""
+    conn.execute(
+        """
+CREATE TABLE login_attempts (
+    ip              TEXT PRIMARY KEY,
+    failures        INTEGER NOT NULL,
+    last_failure_at INTEGER NOT NULL,
+    locked_until    INTEGER
+)
+"""
+    )
+    conn.execute("CREATE INDEX login_attempts_last_failure_at ON login_attempts (last_failure_at)")
+    conn.execute("CREATE TABLE login_failures (at INTEGER NOT NULL)")
+    conn.execute("CREATE INDEX login_failures_at ON login_failures (at)")
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2, migration_3, migration_4)
+MIGRATIONS = (migration_1, migration_2, migration_3, migration_4, migration_5)
 
 
 def user_version(conn: sqlite3.Connection) -> int:
