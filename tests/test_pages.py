@@ -51,3 +51,31 @@ class PagesTest(ApiTestCase):
             self.assertIn(target, nav)
         self.assertEqual(nav.count('aria-current="page"'), 1)
         self.assertRegex(nav, r'href="/import"[^>]*aria-current="page"|aria-current="page"[^>]*href="/import"')
+
+
+    def test_grafico_tem_viewport_css_unico_e_nav_com_o_grafico_marcado(self):
+        body = self.html("/")
+        self.assertIn('name="viewport"', body)
+        self.assertIn('href="/static/app.css"', body)
+        self.assertNotIn("/static/chart/style.css", body)
+        nav = body[body.index("<nav"):body.index("</nav>")]
+        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
+            self.assertIn(target, nav)
+        self.assertEqual(nav.count('aria-current="page"'), 1)
+        self.assertRegex(nav, r'href="/"[^>]*aria-current="page"|aria-current="page"[^>]*href="/"')
+
+    def test_grafico_deixa_busca_e_produto_fora_do_painel_de_filtros(self):
+        body = self.html("/")
+        panel = body[body.index("<details"):body.index("</details>")]
+        self.assertIn("Filtros", panel)
+        for outside in ('id="search"', 'id="product"'):
+            self.assertIn(outside, body)
+            self.assertNotIn(outside, panel)
+        for inside in ('id="category"', 'id="store"', 'id="from"', 'id="to"', 'id="sort"'):
+            self.assertIn(inside, panel)
+
+    def test_grafico_preco_atual_abre_teclado_numerico_e_veredito_e_aria_live(self):
+        body = self.html("/")
+        self.assertRegex(body, r'id="current"[^>]*inputmode="decimal"')
+        self.assertRegex(body, r'id="verdict"[^>]*aria-live="polite"')
+        self.assertLess(body.index('id="verdict"'), body.index('id="chart"'))

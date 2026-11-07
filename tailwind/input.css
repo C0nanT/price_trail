@@ -49,3 +49,15 @@
   .alert { @apply rounded-lg bg-warn-bg px-3 py-2 text-warn; }
   .badge { @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold; }
 }
+
+/* Gráfico: SVG e tooltip criados pelo JS, que utilitários não alcançam. */
+@layer components {
+  #chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  #chart text { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #chart text.value { fill: var(--text); font-size: 13px; font-weight: 600; }
+  .point:focus { outline: none; }
+  .point:focus .dot { stroke: var(--text); }
+  #tooltip { @apply pointer-events-none absolute top-0 z-[1] whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-2 text-[13px]; box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); }
+  #tooltip strong { @apply block text-[15px] tabular-nums; }
+  #tooltip span { @apply block text-muted; }
+}
