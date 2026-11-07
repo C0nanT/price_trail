@@ -104,11 +104,12 @@ class ImportResult:
 
 
 def read_and_save(
-    conn: sqlite3.Connection, path: Path, source_file: str, label: str, known_roots: set[str]
+    conn: sqlite3.Connection, path: Path, source_file: str, label: str | None, known_roots: set[str]
 ) -> ImportResult:
     """Lê a nota do PDF e grava no banco, sem mexer em source_path.
 
-    source_file vai para o banco e para o resultado; label identifica o arquivo no log.
+    source_file vai para o banco e para o resultado; label identifica o arquivo no log; None (servidor)
+    deixa do log nomes, lojas e texto de erro, e só leva a raiz do CNPJ.
     known_roots são as raízes de CNPJ cadastradas ou já avisadas; a função
     acrescenta a da nota lida, então o aviso de loja sem cadastro sai uma vez só.
     """
@@ -116,10 +117,13 @@ def read_and_save(
     try:
         note = parse_note(extract_text(path))
     except NoteError as error:
-        log.error("%s: %s", label, error)
+        if label is None:
+            log.error("nota recusada pelo parser")
+        else:
+            log.error("%s: %s", label, error)
         return ImportResult(ERROR, source_file, str(error))
     except Exception:
-        log.exception("%s: erro inesperado", label)
+        log.exception("erro inesperado" if label is None else f"{label}: erro inesperado")
         return ImportResult(ERROR, source_file, "erro inesperado", unexpected=True)
     cnpj_root = note.seller_cnpj[:8]
     unregistered = cnpj_root not in known_roots
@@ -135,7 +139,10 @@ def read_and_save(
     )
     if unregistered:
         known_roots.add(cnpj_root)
-        log.warning(result.unregistered_store_message)
+        if label is None:
+            log.warning("loja sem cadastro", extra={"cnpj_root": cnpj_root})
+        else:
+            log.warning(result.unregistered_store_message)
     if not save_note(conn, note, source_file):
         result.status = EXISTING
     return result
@@ -180,7 +187,7 @@ def import_upload(
     try:
         return _import_upload(conn, name, content, data_dir, known_roots, log)
     except Exception:
-        log.exception("upload %s: erro inesperado", name)
+        log.exception("upload: erro inesperado")
         return ImportResult(ERROR, name, "erro inesperado", unexpected=True)
 
 
@@ -198,11 +205,10 @@ def _import_upload(
     try:
         with os.fdopen(fd, "wb") as out:
             shutil.copyfileobj(content, out)
-        log.info("upload: %s", name)
         if not has_pdf_signature(tmp):
-            log.error("upload %s: não é um PDF", name)
+            log.error("upload: arquivo não é um PDF")
             return ImportResult(ERROR, name, "não é um PDF")
-        result = read_and_save(conn, tmp, name, f"upload {name}", known_roots)
+        result = read_and_save(conn, tmp, name, None, known_roots)
         if result.status == ERROR:
             return result
         final = data_dir / f"{result.issued_at[:10]}_{result.access_key}.pdf"

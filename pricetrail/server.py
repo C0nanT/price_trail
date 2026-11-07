@@ -25,12 +25,7 @@ class Pairs(list):
     """Objeto JSON lido como lista de pares: guarda nomes repetidos, que um dict esconderia."""
 
 
-def create_app(
-    db_path: Path, data_dir: Path, legacy_dir: Path | None = None, log_file: Path | None = None
-) -> Flask:
-    """log_file recebe o log do upload, no formato do CLI; sem ele, o log fica como estiver."""
-    if log_file is not None:
-        importer.configure_log(log_file)
+def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) -> Flask:
     connect(db_path, data_dir, legacy_dir).close()  # migra agora: um erro aparece ao subir, não no primeiro request
     allowed_hosts = LOCAL_HOSTS | {
         host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()
@@ -181,9 +176,10 @@ def create_app(
         summary = {"new": 0, "existing": 0, "error": 0}
         for result in results:
             summary[SUMMARY_KEYS[result.status]] += 1
-        logging.getLogger("pricetrail").info(
-            "upload: %d novas, %d já existentes, %d com erro", summary["new"], summary["existing"], summary["error"]
-        )
+        log = logging.getLogger("pricetrail")
+        for result in results:
+            log.info("upload: arquivo", extra={"access_key": result.access_key, "status": result.status})
+        log.info("upload: resumo", extra={"summary": summary})
         return jsonify(results=[dataclasses.asdict(result) for result in results], summary=summary)
 
     @app.get("/notes/<access_key>.pdf")

@@ -51,7 +51,7 @@ então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
 Com o servidor ligado (veja abaixo), também dá para importar pela página
 <http://127.0.0.1:8000/import>: escolha ou arraste um ou vários PDFs. Cada nota nova é
 guardada em `data/` como `AAAA-MM-DD_<chave>.pdf`; arquivo com erro não é guardado.
-O envio tem limite de 20 MB e registra no mesmo log do `import` (`serve --log` escolhe o arquivo).
+O envio tem limite de 20 MB; o servidor loga em JSON (stdout até INFO, stderr de WARNING em diante, nível em `LOG_LEVEL`), sem nomes de arquivo, lojas nem textos de notas.
 
 ## Ver o gráfico
 

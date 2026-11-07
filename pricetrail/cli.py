@@ -8,6 +8,7 @@ from pathlib import Path
 from .catalog import CurationFileError, export_curation, restore_curation
 from .db import MigrationError, connect
 from .importer import import_folder
+from .logs import configure_server_logging
 from .server import create_app
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -16,8 +17,9 @@ CURATION_FILE = "curadoria.json"
 DEFAULT_LOG = PROJECT_DIR / "pricetrail.log"
 
 
-def serve(db: Path, data: Path, port: int, log: Path) -> int:
-    app = create_app(db, data, PROJECT_DIR, log)
+def serve(db: Path, data: Path, port: int) -> int:
+    configure_server_logging()
+    app = create_app(db, data, PROJECT_DIR)
     print(f"gráfico em http://{HOST}:{port}/, agrupamento em http://{HOST}:{port}/groups"
           f" e importação em http://{HOST}:{port}/import")
     app.run(host=HOST, port=port)
@@ -63,7 +65,6 @@ def main(argv: list[str] | None = None) -> int:
 
     servir = commands.add_parser("serve", parents=[paths], help="abre o gráfico e o agrupamento em um servidor local")
     servir.add_argument("--port", type=int, default=8000)
-    servir.add_argument("--log", type=Path, default=DEFAULT_LOG, help="log do upload, o mesmo do import")
 
     exportar = commands.add_parser("export", parents=[paths], help="grava grupos, pares rejeitados e lojas num JSON")
     exportar.add_argument("--out", type=Path, default=PROJECT_DIR / CURATION_FILE,
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import":
             return import_folder(args.folder or args.data, args.db, args.log, args.data, PROJECT_DIR)
         if args.command == "serve":
-            return serve(args.db, args.data, args.port, args.log)
+            return serve(args.db, args.data, args.port)
         if args.command == "export":
             return export(args.db, args.data, args.out)
         if args.command == "restore":

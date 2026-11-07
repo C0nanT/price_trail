@@ -145,28 +145,6 @@ class UploadTests(UploadTestCase):
         self.assertIn("20 MB", response.get_json()["error"])
         self.assertEqual(self.data_files(), [])
 
-    def test_upload_registra_no_mesmo_log_do_cli(self):
-        log = self.root / "t.log"
-        self.write_pdf("antiga.pdf", item("10"), number=1)
-        self.import_data()  # o CLI grava em t.log
-        client = create_app(self.db, self.data, self.legacy, log).test_client()
-        self.upload(("ruim.pdf", "corrompido"), client=client)
-        text = log.read_text(encoding="utf-8")
-        self.assertIn("importação iniciada", text)
-        self.assertRegex(text, r"\d{4}-\d{2}-\d{2} [\d:,]+ ERROR .*ruim\.pdf: pdftotext falhou")
-
-    def test_serve_log_escolhe_o_arquivo(self):
-        log = self.root / "servidor.log"
-
-        def fake_run(app, **_kwargs):
-            app.test_client().post("/api/import", data={"files": [(io.BytesIO(b"%PDF-corrompido"), "ruim.pdf")]},
-                                   headers=UPLOAD_HEADERS, content_type="multipart/form-data")
-
-        with mock.patch("flask.Flask.run", fake_run):
-            code, _, _ = run_cli("serve", "--db", self.db, "--data", self.data, "--log", log)
-        self.assertEqual(code, 0)
-        self.assertIn("ruim.pdf: pdftotext falhou", log.read_text(encoding="utf-8"))
-
     def test_importacao_pela_pasta_ignora_temporario_de_upload(self):
         (self.data / ".tmpabc.upload").write_text(note_text(item("10"), number=1), encoding="utf-8")
         self.import_data()
