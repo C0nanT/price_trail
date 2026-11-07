@@ -161,6 +161,7 @@ def import_upload(
     O conteúdo vai antes para um temporário na própria pasta de dados, e o rename
     final é atômico. Fora a nota nova, o temporário é apagado.
     """
+    data_dir.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=data_dir, prefix=".", suffix=UPLOAD_SUFFIX)
     tmp = Path(tmp_name)
     try:

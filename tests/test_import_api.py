@@ -57,6 +57,12 @@ class UploadTests(UploadTestCase):
         self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf", f"2026-10-05_{make_key(number=2)}.pdf"])
         self.assertEqual(len(self.products()), 2)
 
+    def test_pasta_de_dados_ainda_inexistente_e_criada(self):
+        self.data.rmdir()
+        response = self.upload(("a.pdf", note_text(item("10"), number=1)))
+        self.assertEqual(response.get_json()["results"][0]["status"], "NOVA")
+        self.assertEqual(self.data_files(), [f"2026-10-02_{KEY}.pdf"])
+
     def test_reenvio_de_nota_com_pdf_e_ja_tem_sem_arquivo_novo(self):
         client = self.client()
         self.upload(("a.pdf", note_text(item("10"), number=1)), client=client)
