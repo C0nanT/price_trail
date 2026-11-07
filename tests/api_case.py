@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import logging
 import subprocess
 import tempfile
 import unittest
@@ -51,9 +52,19 @@ class ApiTestCase(unittest.TestCase):
         self.data.mkdir()
         # O pdftotext é a fronteira externa: aqui o "PDF" é o próprio texto da nota.
         self.pdftotext_calls = []
+        self.addCleanup(self.close_log_files)
         patcher = mock.patch("subprocess.run", self.fake_pdftotext)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def close_log_files():
+        """O import grava num arquivo temporário: solta o handler antes de a pasta sumir."""
+        log = logging.getLogger("pricetrail")
+        for handler in list(log.handlers):
+            if isinstance(handler, logging.FileHandler):
+                log.removeHandler(handler)
+                handler.close()
 
     def fake_pdftotext(self, command, **_kwargs):
         self.pdftotext_calls.append(command)
