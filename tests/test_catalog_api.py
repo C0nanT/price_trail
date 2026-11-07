@@ -74,6 +74,18 @@ class CatalogTests(ApiTestCase):
         self.assertEqual(self.catalog()["suggestions"][0]["warnings"],
                          ["unidades diferentes", "preços muito diferentes (2.00 a 4.00)"])
 
+    def test_mesmo_codigo_com_duas_unidades_ou_descricoes_nao_vira_sugestao(self):
+        self.add_note(item("1", "DETERGENTE YPE NEUTRO", unit="UND9"), number=1)
+        self.add_note(item("1", "DETERGENTE YPE NEUTRO", unit="KG9"), number=2)
+        self.add_note(item("1", "DETERGENTE YPE NEUTRA"), number=3)
+        self.assertEqual(self.catalog()["suggestions"], [])
+
+    def test_sugestao_lista_cada_referencia_uma_vez(self):
+        self.add_note(item("1", "QJO", unit="UND9"), item("2", "QJO"), number=1)
+        self.add_note(item("1", "QJO", unit="KG9"), number=2)
+        (suggestion,) = self.catalog()["suggestions"]
+        self.assertEqual(suggestion["refs"], ["75315333:1", "75315333:2"])
+
     def test_banco_vazio(self):
         self.assertEqual(self.catalog(), {"products": [], "suggestions": [], "groups": {}, "notes": {}, "rejections": []})
 

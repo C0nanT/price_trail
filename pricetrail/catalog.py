@@ -135,10 +135,12 @@ def _warnings(members: list[dict]) -> list[str]:
 def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
     warnings = _warnings(members)
     first = min(members, key=lambda m: m["description"])
+    # Um código com duas descrições ou unidades é mais de uma linha, mas uma referência só.
+    codes = sorted({member["code"] for member in members})
     return {
         "reason": reason,
         "name": first["description"],
-        "refs": [f"{store}:{member['code']}" for member in sorted(members, key=lambda m: m["code"])],
+        "refs": [f"{store}:{code}" for code in codes],
         "members": members,
         "warnings": warnings,
     }
