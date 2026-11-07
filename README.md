@@ -183,6 +183,25 @@ Para recriar o banco do zero (outra máquina, ou banco perdido):
 
 Os PDFs não entram no repositório; guarde-os à parte.
 
+## Estilo (Tailwind)
+
+O visual vem de um único CSS, `pricetrail/web/app.css`, gerado pelo Tailwind e
+commitado (rodar o servidor não precisa do Tailwind). Só quem muda classes nos
+HTMLs/JS de `pricetrail/web/` precisa regerar. Usamos a CLI standalone do
+Tailwind **v3.4.17** (sem Node). Baixe o binário para `bin/tailwindcss`
+(ignorado pelo git):
+
+```bash
+mkdir -p bin
+curl -sL -o bin/tailwindcss https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64
+chmod +x bin/tailwindcss
+make css          # gera pricetrail/web/app.css minificado
+make css-watch    # regera a cada mudança
+```
+
+Entrada em `tailwind/input.css` (cores claro/escuro como variáveis CSS) e
+configuração em `tailwind.config.js`. Commite o `app.css` junto com a mudança.
+
 ## Testes
 
 Precisam das dependências de `requirements.txt`. Os testes usam notas sintéticas

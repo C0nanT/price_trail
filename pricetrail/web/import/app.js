@@ -21,17 +21,32 @@ function detail(result) {
   return text + (result.message ? `; ${result.message}` : "") + warning;
 }
 
+// Selo de status: texto sempre presente, cor só reforça.
+const BADGE_CLASS = {
+  NOVA: "bg-ok text-surface",
+  "JÁ TEM":"border border-line text-muted",
+  ERRO: "bg-warn-bg text-warn border border-warn",
+};
+
 function showResult({ results, summary }) {
   el("summary").textContent = `${summary.new} novas, ${summary.existing} já existentes, ${summary.error} com erro`;
   el("rows").replaceChildren(...results.map((result) => {
-    const row = document.createElement("tr");
-    for (const text of [result.name, result.status, detail(result)]) {
-      const cell = document.createElement("td");
-      cell.textContent = text;
-      row.append(cell);
-    }
-    if (result.status === "ERRO") row.className = "error";
-    return row;
+    const card = document.createElement("li");
+    card.className = "grid gap-1 rounded-lg border border-line bg-raised p-3";
+    const head = document.createElement("div");
+    head.className = "flex items-start justify-between gap-2";
+    const name = document.createElement("span");
+    name.className = "font-semibold [overflow-wrap:anywhere]";
+    name.textContent = result.name;
+    const badge = document.createElement("span");
+    badge.className = `badge shrink-0 ${BADGE_CLASS[result.status] || BADGE_CLASS.NOVA}`;
+    badge.textContent = result.status;
+    head.append(name, badge);
+    const text = document.createElement("p");
+    text.className = "text-sm text-muted [overflow-wrap:anywhere]";
+    text.textContent = detail(result);
+    card.append(head, text);
+    return card;
   }));
   el("unregistered").hidden = !results.some((result) => result.unregistered_store);
   el("result").hidden = false;
@@ -67,6 +82,7 @@ async function send(files) {
   try {
     showResult(await upload(files));
     el("files").value = "";
+    el("picked").textContent = "Nenhum arquivo escolhido.";
   } catch (error) {
     el("result").hidden = true;
     fail(uploadErrorMessage(error instanceof ApiError ? error : new ApiError(error.message)));
@@ -80,6 +96,11 @@ async function send(files) {
 el("form").addEventListener("submit", (event) => {
   event.preventDefault();
   send(el("files").files);
+});
+
+el("files").addEventListener("change", () => {
+  const names = [...el("files").files].map((file) => file.name);
+  el("picked").textContent = names.length ? `${names.length} arquivo(s): ${names.join(", ")}` : "Nenhum arquivo escolhido.";
 });
 
 const drop = el("drop");

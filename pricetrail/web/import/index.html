@@ -2,29 +2,38 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Importar notas</title>
-<link rel="stylesheet" href="/static/import/style.css">
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<main>
-  <h1>Importar notas</h1>
-  <p class="nav"><a href="/">Ver gráfico</a> · <a href="/groups">Agrupar produtos</a></p>
-  <form id="form">
-    <div id="drop" class="drop">Arraste os PDFs para cá ou
-    <label>escolha no computador <input id="files" name="files" type="file" multiple accept="application/pdf,.pdf"></label></div>
-    <button id="send" type="submit">Enviar</button>
-    <span id="status" role="status" aria-live="polite"></span>
+<nav aria-label="Principal" class="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface md:static md:border-b md:border-t-0" style="padding-bottom: env(safe-area-inset-bottom)">
+  <div class="mx-auto grid max-w-4xl grid-cols-3 md:flex md:gap-2 md:px-4">
+    <a href="/" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Gráfico</a>
+    <a href="/groups" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Agrupar</a>
+    <a href="/import" aria-current="page" class="flex min-h-touch items-center justify-center px-4 text-sm font-semibold text-muted hover:text-ink aria-[current=page]:text-accent aria-[current=page]:underline">Importar</a>
+  </div>
+</nav>
+<main class="page">
+  <h1 class="mb-4 text-2xl font-bold leading-tight">Importar notas</h1>
+  <form id="form" class="grid gap-3">
+    <div id="drop" class="grid gap-3 rounded-lg border-2 border-dashed border-line p-4 text-center md:p-8 [&.over]:border-ink [&.over]:bg-warn-bg">
+      <label class="btn btn-primary w-full cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
+        Escolher PDFs
+        <input id="files" name="files" type="file" multiple accept="application/pdf,.pdf" class="sr-only">
+      </label>
+      <p id="picked" class="text-sm text-muted" aria-live="polite">Nenhum arquivo escolhido.</p>
+      <p class="hidden text-sm text-muted md:block">Ou arraste os PDFs para cá.</p>
+    </div>
+    <button id="send" type="submit" class="btn w-full md:w-auto md:justify-self-start">Enviar</button>
+    <p id="status" role="status" aria-live="polite" class="text-sm text-muted"></p>
   </form>
-  <p id="error" class="warn" role="alert" hidden></p>
-  <section id="result" hidden>
-    <p id="summary"></p>
-    <p id="unregistered" class="warn" hidden>Há lojas sem cadastro: <a href="/groups#h-stores">cadastre em Agrupar produtos, seção Lojas</a>.</p>
-    <p class="nav"><a href="/">Ver o gráfico</a> · <a href="/groups">Agrupar os produtos novos</a></p>
-    <table>
-      <thead><tr><th>Arquivo</th><th>Resultado</th><th>Detalhe</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
+  <p id="error" class="alert mt-3" role="alert" hidden></p>
+  <section id="result" class="mt-6 grid gap-3" hidden>
+    <p id="summary" class="text-lg font-semibold"></p>
+    <p id="unregistered" class="alert border-2 border-warn font-semibold" hidden>Há lojas sem cadastro: <a class="underline" href="/groups#h-stores">cadastre em Agrupar produtos, seção Lojas</a>.</p>
+    <ul id="rows" class="grid gap-2"></ul>
+    <p class="text-sm"><a class="inline-flex min-h-touch items-center text-accent underline" href="/">Ver o gráfico</a> · <a class="inline-flex min-h-touch items-center text-accent underline" href="/groups">Agrupar os produtos novos</a></p>
   </section>
 </main>
 <script src="/static/common.js"></script>

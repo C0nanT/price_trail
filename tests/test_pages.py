@@ -13,7 +13,7 @@ class PagesTest(ApiTestCase):
 
     def test_paginas_e_estaticos_do_import_respondem_200(self):
         self.html("/import")
-        for path in ("/static/import/app.js", "/static/import/style.css", "/static/common.js"):
+        for path in ("/static/import/app.js", "/static/common.js"):
             response = self.client().get(path)
             self.assertEqual(response.status_code, 200, path)
             response.close()
@@ -31,3 +31,23 @@ class PagesTest(ApiTestCase):
     def test_import_liga_para_a_secao_de_lojas_do_groups(self):
         self.assertIn('id="h-stores"', self.html("/groups"))
         self.assertIn('href="/groups#h-stores"', self.html("/import"))
+
+    def test_import_tem_viewport_e_linka_o_css_unico_servido(self):
+        body = self.html("/import")
+        self.assertIn('name="viewport"', body)
+        self.assertIn('href="/static/app.css"', body)
+        self.assertNotIn("/static/import/style.css", body)
+        response = self.client().get("/static/app.css")
+        try:
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_data())
+        finally:
+            response.close()
+
+    def test_import_tem_nav_com_as_tres_paginas_e_marca_a_atual(self):
+        body = self.html("/import")
+        nav = body[body.index("<nav"):body.index("</nav>")]
+        for target in ('href="/"', 'href="/groups"', 'href="/import"'):
+            self.assertIn(target, nav)
+        self.assertEqual(nav.count('aria-current="page"'), 1)
+        self.assertRegex(nav, r'href="/import"[^>]*aria-current="page"|aria-current="page"[^>]*href="/import"')
