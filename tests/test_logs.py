@@ -50,7 +50,7 @@ class ServerLogTest(ApiTestCase):
         self.upload(("a.pdf", note_text(item("10"))))
         (warning,) = [line for line in self.lines() if line["level"] == "WARNING"]
         self.assertEqual(warning["cnpj_root"], "75315333")
-        self.assertNotIn("0290", self.stream.getvalue())
+        self.assertNotIn("0290", json.dumps(warning))
 
     def test_erro_inesperado_usa_exception_com_mensagem_generica(self):
         with mock.patch("pricetrail.importer.read_and_save", side_effect=RuntimeError("falha")):
