@@ -1,7 +1,7 @@
 # pricetrail
 
-Guarda o histórico de preços das suas compras. O script lê os PDFs de NFC-e da
-Consulta Pública da SEF/SC e salva produtos e preços em um banco SQLite.
+Guarda o histórico de preços das suas compras. Importa os PDFs de NFC-e da
+Consulta Pública da SEF/SC para um banco SQLite e mostra os preços em um servidor local.
 
 ## De onde vêm os preços
 
@@ -30,7 +30,7 @@ Salve a nota como PDF a partir dessa página e coloque o arquivo em `data/`.
 
 1. Salve os PDFs das notas em `data/`. Subpastas também são lidas.
 2. Ao salvar pelo Chrome, desligue a opção "Cabeçalhos e rodapés".
-3. Rode o script:
+3. Rode a importação:
 
    ```bash
    python3 -m pricetrail import
@@ -69,8 +69,7 @@ do último preço contra a compra anterior. A página não depende de internet, 
 servidor ligado.
 
 As categorias e os nomes dos estabelecimentos vêm da tabela `stores`, indexada pelos 8
-primeiros dígitos do CNPJ (iguais em todas as filiais). Ela é carregada de `stores.json`
-na primeira vez que o banco é aberto e depois é editada na seção "Lojas" da página `/groups`. Loja sem cadastro aparece com o nome da nota e a
+primeiros dígitos do CNPJ (iguais em todas as filiais). Ela é editada na seção "Lojas" da página `/groups`. Loja sem cadastro aparece com o nome da nota e a
 categoria "Outros".
 
 A mesma mercadoria em duas filiais da mesma rede é um produto só: um produto é a raiz
@@ -84,9 +83,9 @@ do CNPJ, o código e a unidade.
 | `JÁ TEM` | Nota já estava no banco e foi ignorada          |
 | `ERRO`   | Nota não importada; o motivo aparece na mensagem |
 
-Antes de gravar, o script confere a chave de acesso, a quantidade de itens e os
+Antes de gravar, a importação confere a chave de acesso, a quantidade de itens e os
 totais da nota. Se algo não bater, a nota inteira fica de fora e os demais
-arquivos continuam sendo processados. Nesse caso, o script termina com código 1.
+arquivos continuam sendo processados. Nesse caso, o comando termina com código 1.
 
 ## Dados salvos
 
@@ -123,23 +122,18 @@ O comando `sqlite3` é instalado à parte, com `sudo apt install sqlite3`.
 
 ## Limitações
 
-Até agora, o script só foi testado com uma nota do Atacadão. Notas de outras
-lojas podem aparecer como `ERRO` se o layout for diferente.
+O leitor de notas foi feito para o layout das notas de supermercado e já foi usado também com notas de farmácia.
+Uma nota de outra loja pode aparecer como `ERRO` se o layout for diferente; nesse caso, veja a seção Testes.
 
-Mantenha os PDFs em `data/`. Se o formato do banco mudar, eles permitem recriá-lo:
-apague `pricetrail.sqlite` e rode a importação de novo.
+O banco é a fonte da curadoria (grupos, pares rejeitados e lojas): não o apague sem
+antes exportá-la. Veja a seção seguinte.
 
-## Juntar o mesmo produto (products.json)
+## Juntar o mesmo produto
 
 O mesmo produto pode aparecer com códigos diferentes. Nada é juntado sozinho,
-porque a mesma descrição às vezes cobre tamanhos diferentes. Para revisar:
-
-```bash
-python3 suggest_products.py        # mostra candidatos e escreve products.suggested.json
-```
-
-Ou, mais fácil, use a página de agrupamento, em <http://127.0.0.1:8000/groups> com o
-servidor ligado. Ela lê os produtos e os grupos direto do banco.
+porque a mesma descrição às vezes cobre tamanhos diferentes. Use a página de
+agrupamento, em <http://127.0.0.1:8000/groups> com o servidor ligado. Ela lê os
+produtos, as sugestões e os grupos direto do banco.
 
 Cada produto tem "Ver nota (N)", com a lista das notas onde ele aparece e um link para
 abrir o PDF. O caminho de cada PDF fica no banco: se você renomear ou mover o arquivo
@@ -147,22 +141,33 @@ dentro de `data/`, rode a importação de novo e o link volta a funcionar. Use C
 PDF para achar o item.
 
 Nela você marca produtos (ou clica numa sugestão), dá um nome e cria o grupo. Dá para
-renomear, tirar produtos e excluir grupos. Cada alteração é salva direto no banco
-(`PUT /api/groups`); se o servidor recusar, a página mostra o motivo e mantém a edição
-na tela. O gráfico reflete os grupos ao recarregar.
+renomear, tirar produtos e excluir grupos, e rejeitar pares que parecem iguais mas não
+são (eles deixam de ser sugeridos). Cada alteração é salva direto no banco; se o
+servidor recusar, a página mostra o motivo e mantém a edição na tela. O gráfico reflete
+os grupos ao recarregar.
 
-Manualmente: copie os grupos que são mesmo produto para `products.json` (grupos com `!!` costumam
-ser tamanhos diferentes) e rode `python3 chart.py`. Cada referência é um código de
-loja (`"75315333:11757"`, 8 dígitos do CNPJ + código) ou uma descrição exata:
+Cada referência é um código de loja (`75315333:11757`, 8 dígitos do CNPJ + código).
+Produtos com unidades diferentes não são juntados.
 
-```json
-{"Detergente Ypê": ["75315333:11757", "75315333:13453", "75315333:22392"]}
+## Backup e recriação do banco
+
+Grupos, pares rejeitados e lojas existem só no banco. O arquivo `curadoria.json`, versionado
+no repositório, é a cópia de segurança deles:
+
+```bash
+python3 -m pricetrail export    # grava curadoria.json (use --out para outro caminho)
+python3 -m pricetrail restore   # substitui a curadoria do banco pelo arquivo
 ```
 
-Produtos que você já decidiu que são diferentes ficam em `products.rejected.json`
-(mesmo formato) e deixam de aparecer nas sugestões.
+Depois de mudar grupos, rejeições ou lojas, rode `export` de novo e faça commit do
+`curadoria.json` atualizado.
 
-Produtos com unidades diferentes não são juntados. Sem `products.json`, tudo fica como antes.
+Para recriar o banco do zero (outra máquina, ou banco perdido):
+
+1. Coloque os PDFs em `data/` e rode `python3 -m pricetrail import`.
+2. Rode `python3 -m pricetrail restore curadoria.json`.
+
+Os PDFs não entram no repositório; guarde-os à parte.
 
 ## Testes
 

@@ -4,7 +4,7 @@ Status: **não implementado**. Pausado pelo usuário. Este documento tem o conte
 
 ## Objetivo
 
-Facilitar a busca de um produto na página `chart.html` usando o código de barras
+Facilitar a busca de um produto na página do gráfico (`pricetrail/web/chart/`) usando o código de barras
 (EAN) da embalagem, em vez de digitar o nome.
 
 ## Descobertas
@@ -16,8 +16,8 @@ Facilitar a busca de um produto na página `chart.html` usando o código de barr
 - O EAN sozinho não dá o nome do produto. O prefixo `789` é Brasil e os dígitos
   seguintes identificam a empresa. Nome e peso exatos exigem uma base externa
   (Cosmos, Open Food Facts) ou cadastro manual.
-- A busca de `chart.html` filtra por descrição, código e loja
-  (função `fillOptions` em `chart.py`).
+- A busca da página do gráfico filtra por descrição, código e loja
+  (função `fillOptions` em `pricetrail/web/chart/app.js`).
 
 ## Exemplo concreto
 
@@ -41,7 +41,7 @@ Itens Melitta no banco, todos do ATACADAO S.A.:
    no SQLite, preenchida à mão uma vez por produto. Um comando simples, por
    exemplo `python3 -m pricetrail --ean 7891021007177 --produto 84323`, ou um
    arquivo `data/eans.csv` lido na importação.
-2. Em `chart.py`, `load_products` inclui o campo `eans` de cada produto no JSON.
+2. Na API (`/api/products`), incluir o campo `eans` de cada produto no JSON.
    A busca de `fillOptions` passa a comparar também com os EANs.
 3. Opcional: leitor de código de barras pela câmera do celular na página
    (API `BarcodeDetector`, ou biblioteca JS) que preenche o campo de busca.
@@ -53,13 +53,13 @@ Itens Melitta no banco, todos do ATACADAO S.A.:
 
 - O código interno é da loja. A mesma mercadoria em outra loja tem outro código.
   A tabela de apelidos deve permitir vários produtos por EAN (um por loja).
-- `chart.html` é gerado por `chart.py` e funciona offline. Se a leitura por
-  câmera usar biblioteca externa, ela precisa ser embutida na página.
+- A página é servida por `python3 -m pricetrail serve`. Se a leitura por
+  câmera usar biblioteca externa, ela precisa ser servida junto com a página.
 - `BarcodeDetector` não existe em todos os navegadores (Firefox, por exemplo).
-- Rodar `python3 chart.py` depois de mudar o banco ou o template.
+- Basta recarregar a página depois de mudar o banco.
 
 ## Estado atual da página (feito antes desta conversa)
 
-Os cards "Último/Menor/Maior preço" e "Variação" foram removidos de `chart.py`.
+Os cards "Último/Menor/Maior preço" e "Variação" foram removidos da página do gráfico.
 No lugar: média dos preços, linha tracejada da média no gráfico, campo
 "Preço atual" e veredito Barato/Caro/Na média (margem de 5%, `NEAR_AVERAGE`).

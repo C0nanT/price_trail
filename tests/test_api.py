@@ -118,6 +118,14 @@ class MigrationTests(ApiTestCase):
     def test_banco_novo_sem_jsons_abre_vazio(self):
         self.assertEqual(self.products(), [])
 
+    def test_banco_novo_sem_pasta_da_curadoria_antiga_ou_com_pasta_inexistente_e_criado(self):
+        for legacy in (None, self.root / "nao_existe"):
+            db = self.root / f"{legacy is None}.sqlite"
+            connect(db, self.data, legacy).close()
+            conn = sqlite3.connect(db)
+            self.addCleanup(conn.close)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM stores").fetchone()[0], 0)
+
     def test_carga_roda_uma_vez_e_reabrir_nao_tem_efeito(self):
         self.build_version_0()
         self.write_legacy("stores.json", self.STORES)

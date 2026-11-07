@@ -1,6 +1,6 @@
 # Plano: filtros e destaques no gráfico
 
-Status: **implementado**. Tudo em `chart.py` (JS embutido), sem
+Status: **implementado**. Tudo em `pricetrail/web/chart/` (antes `chart.py`, hoje removido), sem
 mudar o banco. Pode ser feito antes da normalização de produtos.
 
 ## Itens
