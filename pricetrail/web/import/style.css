@@ -29,3 +29,6 @@ form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 tr.error td { color: var(--warn); }
+.drop { flex: 1 1 100%; padding: 20px; text-align: center; border: 2px dashed var(--line); border-radius: 8px; }
+.drop.over { border-color: var(--text); background: var(--warn-bg); }
+button:disabled { cursor: wait; }

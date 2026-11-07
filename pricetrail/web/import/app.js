@@ -33,28 +33,63 @@ function showResult({ results, summary }) {
     if (result.status === "ERRO") row.className = "error";
     return row;
   }));
+  el("unregistered").hidden = !results.some((result) => result.unregistered_store);
   el("result").hidden = false;
 }
 
-el("form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const files = el("files").files;
+function fail(message) {
+  el("error").textContent = message;
+  el("error").hidden = false;
+}
+
+// Mensagem legível para cada falha do envio; status ausente é o servidor fora do ar.
+function uploadErrorMessage(error) {
+  const reasons = {
+    403: "o servidor recusou o envio; use a página /import do próprio servidor",
+    413: "os arquivos passam do limite de 20 MB",
+    422: error.message,
+  };
+  if (error.status === undefined) return "Nada foi importado: não consegui falar com o servidor. Confira se ele está rodando.";
+  return `Nada foi importado: ${reasons[error.status] || error.message}`;
+}
+
+let sending = false;
+
+async function send(files) {
+  if (sending) return;
   el("error").hidden = true;
-  if (!files.length) {
-    el("error").textContent = "Escolha um ou mais PDFs.";
-    el("error").hidden = false;
-    return;
-  }
+  if (!files.length) return fail("Escolha um ou mais PDFs.");
+  sending = true;
   el("send").disabled = true;
   el("status").textContent = "Enviando...";
   try {
     showResult(await upload(files));
     el("files").value = "";
   } catch (error) {
-    el("error").textContent = `Nada foi importado: ${error.message}`;
-    el("error").hidden = false;
+    el("result").hidden = true;
+    fail(uploadErrorMessage(error instanceof ApiError ? error : new ApiError(error.message)));
   } finally {
+    sending = false;
     el("send").disabled = false;
     el("status").textContent = "";
   }
+}
+
+el("form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  send(el("files").files);
 });
+
+const drop = el("drop");
+for (const name of ["dragenter", "dragover"]) {
+  drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("over"); });
+}
+for (const name of ["dragleave", "drop"]) {
+  drop.addEventListener(name, () => drop.classList.remove("over"));
+}
+drop.addEventListener("drop", (event) => {
+  event.preventDefault();
+  send([...event.dataTransfer.files].filter((file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name)));
+});
+// Soltar fora da área não deve abrir o PDF no navegador.
+for (const name of ["dragover", "drop"]) window.addEventListener(name, (event) => event.preventDefault());
