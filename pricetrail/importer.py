@@ -2,6 +2,7 @@
 import logging
 import sqlite3
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .catalog import registered_store_roots
@@ -70,6 +71,73 @@ def update_source_path(conn: sqlite3.Connection, access_key: str, source_path: s
         )
 
 
+NEW = "NOVA"
+EXISTING = "JÁ TEM"
+ERROR = "ERRO"
+
+
+@dataclass
+class ImportResult:
+    """Resultado de importar um arquivo. Os campos da nota só existem quando ela foi lida."""
+
+    status: str
+    name: str
+    message: str = ""
+    access_key: str | None = None
+    seller_name: str | None = None
+    cnpj_root: str | None = None
+    item_count: int | None = None
+    issued_at: str | None = None
+    unregistered_store: bool = False
+    unexpected: bool = False  # erro fora do parser; o detalhe está no log
+
+    @property
+    def unregistered_store_message(self) -> str:
+        return (
+            f"loja sem cadastro: {self.seller_name} (CNPJ {self.cnpj_root}); "
+            "cadastre nome e categoria na página /groups do servidor"
+        )
+
+
+def import_file(conn: sqlite3.Connection, path: Path, data_dir: Path, known_roots: set[str]) -> ImportResult:
+    """Importa um PDF e devolve o resultado, sem escrever no terminal.
+
+    known_roots são as raízes de CNPJ cadastradas ou já avisadas; a função
+    acrescenta a da nota lida, então o aviso de loja sem cadastro sai uma vez só.
+    """
+    log = logging.getLogger("pricetrail")
+    try:
+        note = parse_note(extract_text(path))
+    except NoteError as error:
+        log.error("%s: %s", path, error)
+        return ImportResult(ERROR, path.name, str(error))
+    except Exception:
+        log.exception("%s: erro inesperado", path)
+        return ImportResult(ERROR, path.name, "erro inesperado", unexpected=True)
+    cnpj_root = note.seller_cnpj[:8]
+    unregistered = cnpj_root not in known_roots
+    result = ImportResult(
+        NEW,
+        path.name,
+        access_key=note.access_key,
+        seller_name=note.seller_name,
+        cnpj_root=cnpj_root,
+        item_count=len(note.items),
+        issued_at=note.issued_at,
+        unregistered_store=unregistered,
+    )
+    if unregistered:
+        known_roots.add(cnpj_root)
+        log.warning(result.unregistered_store_message)
+    is_new = save_note(conn, note, path.name)
+    source_path = path_in_data(path, data_dir)
+    if source_path is not None:
+        update_source_path(conn, note.access_key, source_path)
+    if not is_new:
+        result.status = EXISTING
+    return result
+
+
 def import_folder(
     folder: Path, db: Path, log_file: Path, data_dir: Path, legacy_dir: Path | None = None
 ) -> int:
@@ -103,37 +171,20 @@ def import_folder(
     known_roots = registered_store_roots(conn)
     imported = skipped = failed = 0
     for path in find_pdfs(folder):
-        try:
-            note = parse_note(extract_text(path))
-        except NoteError as error:
+        result = import_file(conn, path, data_dir, known_roots)
+        if result.status == ERROR:
             failed += 1
-            log.error("%s: %s", path, error)
-            print(f"ERRO   {path.name}: {error}", file=sys.stderr)
+            detail = f" (ver {log_file.name})" if result.unexpected else ""
+            print(f"ERRO   {result.name}: {result.message}{detail}", file=sys.stderr)
             continue
-        except Exception:
-            failed += 1
-            log.exception("%s: erro inesperado", path)
-            print(f"ERRO   {path.name}: erro inesperado (ver {log_file.name})", file=sys.stderr)
-            continue
-        cnpj_root = note.seller_cnpj[:8]
-        if cnpj_root not in known_roots:
-            known_roots.add(cnpj_root)
-            message = (
-                f"loja sem cadastro: {note.seller_name} (CNPJ {cnpj_root}); "
-                "cadastre nome e categoria na página /groups do servidor"
-            )
-            log.warning(message)
-            print(f"AVISO  {message}", file=sys.stderr)
-        is_new = save_note(conn, note, path.name)
-        source_path = path_in_data(path, data_dir)
-        if source_path is not None:
-            update_source_path(conn, note.access_key, source_path)
-        if is_new:
+        if result.unregistered_store:
+            print(f"AVISO  {result.unregistered_store_message}", file=sys.stderr)
+        if result.status == NEW:
             imported += 1
-            print(f"NOVA   {path.name}: {note.seller_name}, {len(note.items)} itens, {note.issued_at}")
+            print(f"NOVA   {result.name}: {result.seller_name}, {result.item_count} itens, {result.issued_at}")
         else:
             skipped += 1
-            print(f"JÁ TEM {path.name}: chave {note.access_key}")
+            print(f"JÁ TEM {result.name}: chave {result.access_key}")
     conn.close()
 
     summary = f"{imported} novas, {skipped} já existentes, {failed} com erro"
