@@ -2,6 +2,7 @@
 import dataclasses
 import json
 import logging
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -9,10 +10,10 @@ from pathlib import Path
 from flask import Flask, abort, g, jsonify, request, send_file
 
 from . import catalog, importer, shopping
-from .db import connect
+from .db import connect, open_connection
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
-ALLOWED_HOSTS = {"localhost", "127.0.0.1"}
+LOCAL_HOSTS = {"localhost", "127.0.0.1"}
 ACCESS_KEY_RE = re.compile(r"[0-9]{44}")
 MAX_UPLOAD_MB = 20
 MAX_UPLOAD_FILES = 50
@@ -31,6 +32,9 @@ def create_app(
     if log_file is not None:
         importer.configure_log(log_file)
     connect(db_path, data_dir, legacy_dir).close()  # migra agora: um erro aparece ao subir, não no primeiro request
+    allowed_hosts = LOCAL_HOSTS | {
+        host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()
+    }
     app = Flask(__name__, static_folder=WEB_DIR, static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
@@ -53,8 +57,21 @@ def create_app(
     @app.before_request
     def refuse_foreign_host() -> None:
         """Contra DNS rebinding: um site externo não pode se passar pelo servidor local."""
-        if request.host.split(":")[0].lower() not in ALLOWED_HOSTS:
+        if request.host.split(":")[0].lower() not in allowed_hosts:
             abort(403)
+
+    @app.get("/health")
+    def health():
+        """Conexão nova, sem migrar nem tocar nos PDFs; o corpo do erro não traz detalhes."""
+        try:
+            conn = open_connection(db_path)
+            try:
+                conn.execute("SELECT 1").fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            return jsonify(status="erro"), 503
+        return jsonify(status="ok")
 
     @app.get("/")
     def chart_page():
