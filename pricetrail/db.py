@@ -95,9 +95,10 @@ CREATE TABLE group_refs (
 )
 
 
-# re.ASCII: \d aceitaria dígitos de outras escritas, como os de largura cheia.
-CNPJ_ROOT_RE = re.compile(r"\d{8}", re.ASCII)
-CODE_REF_RE = re.compile(r"(\d{8}):(\S+)", re.ASCII)
+# [0-9] e não \d, que aceitaria dígitos de outras escritas, como os de largura cheia.
+# Sem re.ASCII: com ele, \S aceitaria espaços que não são ASCII no código.
+CNPJ_ROOT_RE = re.compile(r"[0-9]{8}")
+CODE_REF_RE = re.compile(r"([0-9]{8}):(\S+)")
 
 
 def parse_ref(ref: object) -> tuple[str, str] | None:
