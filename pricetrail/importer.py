@@ -4,7 +4,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .catalog import is_registered_store
+from .catalog import registered_store_roots
 from .db import connect
 from .nfce import Note, NoteError, parse_note
 from .pdfs import extract_text, find_pdfs, path_in_data
@@ -99,7 +99,8 @@ def import_folder(
         log.warning(message)
         print(f"AVISO  {message}", file=sys.stderr)
 
-    warned_stores: set[str] = set()
+    # Raízes cadastradas ou já avisadas: quem está aqui não gera aviso.
+    known_roots = registered_store_roots(conn)
     imported = skipped = failed = 0
     for path in find_pdfs(folder):
         try:
@@ -114,11 +115,11 @@ def import_folder(
             log.exception("%s: erro inesperado", path)
             print(f"ERRO   {path.name}: erro inesperado (ver {log_file.name})", file=sys.stderr)
             continue
-        prefix = note.seller_cnpj[:8]
-        if prefix not in warned_stores and not is_registered_store(conn, prefix):
-            warned_stores.add(prefix)
+        cnpj_root = note.seller_cnpj[:8]
+        if cnpj_root not in known_roots:
+            known_roots.add(cnpj_root)
             message = (
-                f"loja sem cadastro: {note.seller_name} (CNPJ {prefix}); "
+                f"loja sem cadastro: {note.seller_name} (CNPJ {cnpj_root}); "
                 "cadastre nome e categoria na página /groups do servidor"
             )
             log.warning(message)

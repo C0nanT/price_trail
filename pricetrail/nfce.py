@@ -32,7 +32,7 @@ ISSUE_RE = re.compile(
     r"Número:\s*(?P<number>\d+)\s+Série:\s*(?P<series>\d+)\s+"
     r"Emissão:\s*(?P<issued_at>\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})"
 )
-ACCESS_KEY_RE = re.compile(r"Chave de acesso:\s*((?:\d{4}\s+){10}\d{4})")
+ACCESS_KEY_LINE_RE = re.compile(r"Chave de acesso:\s*((?:\d{4}\s+){10}\d{4})")
 ITEM_COUNT_RE = re.compile(r"Qtd\. total de itens:\s*(\d+)")
 TOTAL_RE = re.compile(r"Valor total R\$:\s*([\d.,]+)")
 DISCOUNT_RE = re.compile(r"Descontos R\$:\s*([\d.,]+)")
@@ -150,7 +150,7 @@ def parse_note(text: str) -> Note:
         raise NoteError(f"campo não encontrado: {ITEMS_END}")
     items = parse_items(text[header.end() : text.index(ITEMS_END)])
 
-    key = re.sub(r"\s", "", require(ACCESS_KEY_RE, text, "chave de acesso")[1])
+    key = re.sub(r"\s", "", require(ACCESS_KEY_LINE_RE, text, "chave de acesso")[1])
     issue = require(ISSUE_RE, text, "número/série/emissão")
     item_count = int(require(ITEM_COUNT_RE, text, "quantidade de itens")[1])
     paid_cents = to_cents(require(PAID_RE, text, "valor a pagar")[1])

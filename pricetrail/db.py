@@ -10,7 +10,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .nfce import ACCESS_KEY_RE, NoteError
+from .nfce import ACCESS_KEY_LINE_RE, NoteError
 from .pdfs import extract_text, find_pdfs, path_in_data
 
 BASE_STATEMENTS = (
@@ -181,7 +181,7 @@ def index_pdfs(data_dir: Path) -> tuple[dict[str, Path], dict[str, Path]]:
     by_name: dict[str, Path] = {}
     for pdf in find_pdfs(data_dir):
         try:
-            match = ACCESS_KEY_RE.search(extract_text(pdf))
+            match = ACCESS_KEY_LINE_RE.search(extract_text(pdf))
         except (NoteError, OSError):
             match = None
         if match:

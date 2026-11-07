@@ -11,7 +11,7 @@ FILIAL = {"cnpj": "75315333000199", "cnpj_text": "75.315.333/0001-99"}
 
 
 class CatalogTests(ApiTestCase):
-    def test_formato_igual_ao_do_data_js(self):
+    def test_formato_da_resposta(self):
         self.write_legacy("stores.json", {"75315333": {"store": "Atacadão", "category": "Mercado"}})
         self.write_legacy("products.json", {"Detergente": [REF]})
         self.write_pdf("a.pdf", item("10", price="5,00"), number=7)

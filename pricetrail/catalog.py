@@ -84,13 +84,14 @@ def normalize(text: str) -> str:
 
 
 def similar(a: str, b: str) -> bool:
-    """ratio() é lento e roda a cada request; os dois primeiros são limites superiores dele."""
+    """ratio() é lento e roda a cada request; os limites superiores dele vêm antes.
+
+    O primeiro é o de real_quick_ratio(), calculado sem montar o SequenceMatcher.
+    """
+    if 2 * min(len(a), len(b)) / (len(a) + len(b) or 1) <= SIMILAR_RATIO:
+        return False
     matcher = difflib.SequenceMatcher(None, a, b)
-    return (
-        matcher.real_quick_ratio() > SIMILAR_RATIO
-        and matcher.quick_ratio() > SIMILAR_RATIO
-        and matcher.ratio() > SIMILAR_RATIO
-    )
+    return matcher.quick_ratio() > SIMILAR_RATIO and matcher.ratio() > SIMILAR_RATIO
 
 
 def suggest_groups(rows: list[dict]) -> list[dict]:
@@ -100,24 +101,24 @@ def suggest_groups(rows: list[dict]) -> list[dict]:
     prices (lista), purchases (int). Sugere, na mesma loja: mesma descrição com
     códigos diferentes, e descrições quase iguais.
     """
-    by_store = defaultdict(list)
+    by_root = defaultdict(list)
     for row in rows:
-        by_store[row["cnpj"][:8]].append(row)
+        by_root[row["cnpj"][:8]].append(row)
 
     suggestions = []
-    for store, items in by_store.items():
+    for cnpj_root, items in by_root.items():
         by_description = defaultdict(list)
         for item in items:
             by_description[normalize(item["description"])].append(item)
         for description, members in sorted(by_description.items()):
             if len(members) > 1:
-                suggestions.append(_suggestion("mesma descrição", store, members))
+                suggestions.append(_suggestion("mesma descrição", cnpj_root, members))
         names = sorted(by_description)
         for index, a in enumerate(names):
             for b in names[index + 1 :]:
                 if similar(a, b):
                     suggestions.append(
-                        _suggestion("descrições parecidas", store, by_description[a] + by_description[b])
+                        _suggestion("descrições parecidas", cnpj_root, by_description[a] + by_description[b])
                     )
     return suggestions
 
@@ -132,7 +133,7 @@ def _warnings(members: list[dict]) -> list[str]:
     return warnings
 
 
-def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
+def _suggestion(reason: str, cnpj_root: str, members: list[dict]) -> dict:
     warnings = _warnings(members)
     first = min(members, key=lambda m: m["description"])
     # Um código com duas descrições ou unidades é mais de uma linha, mas uma referência só.
@@ -140,7 +141,7 @@ def _suggestion(reason: str, store: str, members: list[dict]) -> dict:
     return {
         "reason": reason,
         "name": first["description"],
-        "refs": [f"{store}:{code}" for code in codes],
+        "refs": [f"{cnpj_root}:{code}" for code in codes],
         "members": members,
         "warnings": warnings,
     }
@@ -349,8 +350,8 @@ def list_stores(conn: sqlite3.Connection) -> dict:
     }
 
 
-def is_registered_store(conn: sqlite3.Connection, cnpj_root: str) -> bool:
-    return conn.execute("SELECT 1 FROM stores WHERE cnpj_root = ?", (cnpj_root,)).fetchone() is not None
+def registered_store_roots(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT cnpj_root FROM stores")}
 
 
 def save_store(conn: sqlite3.Connection, cnpj_root: str, store, category) -> dict:
