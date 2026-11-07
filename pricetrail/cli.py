@@ -1,10 +1,12 @@
 """Linha de comando: python3 -m pricetrail <subcomando>."""
 import argparse
+import getpass
 import os
 import sys
 from contextlib import closing
 from pathlib import Path
 
+from .auth import AuthConfigError, hash_password
 from .catalog import CurationFileError, export_curation, restore_curation
 from .db import MigrationError, connect
 from .importer import import_folder
@@ -23,6 +25,19 @@ def serve(db: Path, data: Path, port: int) -> int:
     print(f"gráfico em http://{HOST}:{port}/, agrupamento em http://{HOST}:{port}/groups"
           f" e importação em http://{HOST}:{port}/import")
     app.run(host=HOST, port=port)
+    return 0
+
+
+def hash_password_command() -> int:
+    """Pede a senha sem eco, duas vezes, e imprime o hash argon2 para o AUTH_PASSWORD_HASH do .env."""
+    password = getpass.getpass("Senha: ")
+    if not password:
+        print("senha vazia: nada foi gerado", file=sys.stderr)
+        return 2
+    if getpass.getpass("Repita a senha: ") != password:
+        print("as senhas não conferem: nada foi gerado", file=sys.stderr)
+        return 2
+    print(hash_password(password))
     return 0
 
 
@@ -75,8 +90,12 @@ def main(argv: list[str] | None = None) -> int:
     restaurar.add_argument("file", nargs="?", type=Path, default=PROJECT_DIR / CURATION_FILE,
                            help=f"arquivo a ler (padrão: {CURATION_FILE})")
 
+    commands.add_parser("hash-password", help="pede uma senha e imprime o hash argon2 para AUTH_PASSWORD_HASH")
+
     args = parser.parse_args(argv)
     try:
+        if args.command == "hash-password":
+            return hash_password_command()
         if args.command == "import":
             return import_folder(args.folder or args.data, args.db, args.log, args.data, PROJECT_DIR)
         if args.command == "serve":
@@ -87,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
             return restore(args.db, args.data, args.file)
     except MigrationError as error:
         print(f"migração do banco falhou, nada foi alterado: {error}", file=sys.stderr)
+        return 2
+    except AuthConfigError as error:
+        print(f"o servidor não subiu: {error}", file=sys.stderr)
         return 2
     return 2
 
