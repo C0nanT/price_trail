@@ -42,7 +42,7 @@
           <input id="ungrouped" type="checkbox" checked class="h-6 w-6 shrink-0 accent-accent"> Só sem grupo
         </label>
       </div>
-      <ul id="products" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:before:block empty:before:p-3 empty:before:text-muted empty:before:content-['Nada_aqui.']"></ul>
+      <ul id="products" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_produto_para_esses_filtros.']"></ul>
     </section>
 
     <section class="min-w-0 scroll-mt-16 md:scroll-mt-4" aria-labelledby="h-draft">
@@ -56,16 +56,16 @@
 
       <h2 id="h-suggestions" class="mb-2 mt-8 scroll-mt-16 text-lg font-bold md:scroll-mt-4">Sugestões <small id="sug-count" class="text-sm font-normal text-muted"></small></h2>
       <p class="mb-2 text-sm text-muted">Grupos com <span class="badge bg-warn-bg text-warn">aviso</span> costumam ser tamanhos diferentes.</p>
-      <ul id="suggestions" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:before:block empty:before:p-3 empty:before:text-muted empty:before:content-['Nada_aqui.']"></ul>
+      <ul id="suggestions" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhuma_sugestão_no_momento.']"></ul>
 
       <h2 class="mb-2 mt-8 text-lg font-bold">Não juntar <small id="rej-count" class="text-sm font-normal text-muted"></small></h2>
       <p class="mb-2 text-sm text-muted">Pares que você descartou. Desfazer traz a sugestão de volta.</p>
-      <ul id="rejections" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:before:block empty:before:p-3 empty:before:text-muted empty:before:content-['Nada_aqui.']"></ul>
+      <ul id="rejections" class="divide-y divide-line overflow-hidden rounded-lg border border-line empty:border-dashed empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_par_descartado.']"></ul>
     </section>
 
     <section class="min-w-0 scroll-mt-16 md:col-span-2 md:scroll-mt-4" aria-labelledby="h-groups">
       <h2 id="h-groups" class="mb-2 text-lg font-bold">Grupos <small id="group-count" class="text-sm font-normal text-muted"></small></h2>
-      <ul id="groups" class="grid gap-3 md:grid-cols-2 empty:before:text-muted empty:before:content-['Nenhum_grupo_ainda.']"></ul>
+      <ul id="groups" class="grid gap-3 md:grid-cols-2 empty:rounded-lg empty:border empty:border-dashed empty:border-line empty:p-4 empty:text-center empty:text-muted empty:before:content-['Nenhum_grupo_ainda._Crie_um_acima.']"></ul>
     </section>
 
     <section class="min-w-0 scroll-mt-16 md:col-span-2 md:scroll-mt-4" aria-labelledby="h-stores">

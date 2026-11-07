@@ -193,7 +193,7 @@ function renderSuggestions() {
     const head = make("div", { className: "flex flex-wrap items-center gap-2" }, make("strong", { className: "mr-auto min-w-0 break-words", textContent: s.name }), pick, reject);
     const meta = make("div", { className: `mt-1 ${META}` }, `${free.length} produtos · ${s.reason} · cód. ${free.map((r) => r.split(":")[1]).join(", ")} `);
     for (const w of s.warnings) meta.append(make("span", { className: "badge bg-warn-bg text-warn", textContent: w }), " ");
-    return make("li", { className: "p-3" }, head, meta);
+    return make("li", { className: s.warnings.length ? "border-l-4 border-warn p-3" : "p-3" }, head, meta);
   }));
 }
 

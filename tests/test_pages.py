@@ -99,3 +99,17 @@ class PagesTest(ApiTestCase):
         bar = body[body.index('id="selection-bar"'):]
         self.assertIn('id="create"', bar)
         self.assertIn('id="clear"', bar)
+
+    def test_groups_estaticos_respondem_200_sem_css_antigo_e_com_estilos_usados(self):
+        body = self.html("/groups")
+        self.assertNotIn("group/style.css", body)
+        for path in ("/static/app.css", "/static/common.js", "/static/group/app.js", "/static/group/stores.js"):
+            response = self.client().get(path)
+            self.assertEqual(response.status_code, 200, path)
+            if path == "/static/app.css":
+                css = response.get_data(as_text=True)
+                # Estilos novos de estados vazios e do selo de aviso precisam estar no CSS gerado.
+                for cls in ("empty\\:border-dashed", "border-l-4"):
+                    self.assertIn(cls, css)
+            response.close()
+        self.assertEqual(self.client().get("/static/group/style.css").status_code, 404)
