@@ -9,7 +9,6 @@ const categorySelect = el("category");
 const storeSelect = el("store");
 const fromInput = el("from");
 const toInput = el("to");
-const sortSelect = el("sort");
 const ALL = "";
 const filtersPanel = el("filters");
 const filterCount = el("filter-count");
@@ -79,28 +78,9 @@ function variationOf(purchases) {
   return { change: last.price / previous.price - 1, previous };
 }
 
-function sortMatches(entries) {
-  const mode = sortSelect.value;
-  if (mode === "name") {
-    entries.sort((a, b) => a.product.description.localeCompare(b.product.description, "pt-BR"));
-  } else if (mode === "rise" || mode === "drop") {
-    const sign = mode === "rise" ? -1 : 1;
-    // Produtos com uma só compra (sem variação) vão para o fim.
-    entries.sort((a, b) => {
-      if (a.variation === null || b.variation === null) {
-        return (a.variation === null) - (b.variation === null);
-      }
-      return sign * (a.variation.change - b.variation.change);
-    });
-  }
-  // "purchases": mantém a ordem vinda da API (mais compras primeiro).
-  return entries;
-}
-
 // Filtros fora do padrão (os de dentro do painel recolhível).
 function updateFilterCount() {
-  const active = [categorySelect, storeSelect, fromInput, toInput].filter((input) => input.value).length
-    + (sortSelect.value === "purchases" ? 0 : 1);
+  const active = [categorySelect, storeSelect, fromInput, toInput].filter((input) => input.value).length;
   filterCount.textContent = `${active} ${active === 1 ? "ativo" : "ativos"}`;
   filterCount.classList.toggle("bg-accent", active > 0);
   filterCount.classList.toggle("text-accent-ink", active > 0);
@@ -117,10 +97,10 @@ function fillOptions() {
     if (!terms.every((term) => product.haystack.includes(term))) return;
     const purchases = purchasesIn(product, range);
     if (!purchases.length) return;
-    entries.push({ product, index, count: purchases.length, variation: variationOf(purchases) });
+    entries.push({ product, index, count: purchases.length });
   });
   const previous = select.value;
-  select.replaceChildren(...sortMatches(entries).map(({ product, index, count }) => {
+  select.replaceChildren(...entries.map(({ product, index, count }) => {
     const label = `${product.description} (${product.code.length > 24 ? product.code.slice(0, 21) + "…" : product.code}) · ${count} ${count === 1 ? "compra" : "compras"}`;
     return new Option(label, index);
   }));
@@ -391,7 +371,7 @@ async function start() {
   search.addEventListener("input", fillOptions);
   categorySelect.addEventListener("change", () => { fillStores(); fillOptions(); });
   storeSelect.addEventListener("change", fillOptions);
-  for (const input of [fromInput, toInput, sortSelect]) input.addEventListener("change", fillOptions);
+  for (const input of [fromInput, toInput]) input.addEventListener("change", fillOptions);
   select.addEventListener("change", render);
   // Em telas largas os filtros ficam sempre abertos e inline; no celular, recolhidos.
   const syncFilters = () => { filtersPanel.open = wide.matches; };

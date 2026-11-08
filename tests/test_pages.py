@@ -83,7 +83,7 @@ class PagesTest(ApiTestCase):
         for outside in ('id="search"', 'id="product"'):
             self.assertIn(outside, body)
             self.assertNotIn(outside, panel)
-        for inside in ('id="category"', 'id="store"', 'id="from"', 'id="to"', 'id="sort"'):
+        for inside in ('id="category"', 'id="store"', 'id="from"', 'id="to"'):
             self.assertIn(inside, panel)
 
     def test_grafico_preco_atual_abre_teclado_numerico_e_veredito_e_aria_live(self):
