@@ -9,3 +9,4 @@ bin/tailwindcss
 *.db-wal
 *.db-shm
 .env
+migracao/
