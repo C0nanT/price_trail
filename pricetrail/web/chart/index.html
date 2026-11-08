@@ -16,7 +16,10 @@
   </div>
 </nav>
 <main class="page">
-  <h1 class="mb-4 text-2xl font-bold leading-tight">Histórico de preços</h1>
+  <div class="flex items-start justify-between gap-3">
+    <h1 class="mb-4 text-2xl font-bold leading-tight">Histórico de preços</h1>
+    <button type="button" data-logout class="inline-flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-muted underline hover:text-ink">Sair</button>
+  </div>
   <div class="grid gap-3 md:grid-cols-2">
     <label class="grid gap-1 text-sm text-muted">Buscar <input id="search" type="search" placeholder="Ex.: tomate" autocomplete="off" class="field"></label>
     <label class="grid gap-1 text-sm text-muted">Produto <select id="product" class="field"></select></label>

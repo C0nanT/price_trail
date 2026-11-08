@@ -1,6 +1,9 @@
 """Comportamento externo do servidor: cliente de teste do Flask sobre um banco temporário."""
+import os
+import shutil
 import sqlite3
 import unittest
+from unittest import mock
 
 from pricetrail import importer, nfce
 from pricetrail.db import SCHEMA, MigrationError, connect
@@ -177,13 +180,15 @@ class MigrationTests(ApiTestCase):
         self.add_note(item("10"))
         conn = sqlite3.connect(self.db)
         conn.execute("DROP INDEX group_refs_group_id")
+        conn.execute("DROP TABLE login_attempts")
+        conn.execute("DROP TABLE login_failures")
         conn.execute("PRAGMA user_version = 3")
         conn.commit()
         conn.close()
         self.assertEqual(self.products()[0]["description"], "Detergente")
         conn = sqlite3.connect(self.db)
         self.addCleanup(conn.close)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 5)
         # O índice serve ao join dos grupos e ao ON DELETE CASCADE de product_groups.
         plan = " ".join(row[3] for row in conn.execute(
             "EXPLAIN QUERY PLAN SELECT * FROM group_refs WHERE group_id = 1"))
@@ -215,6 +220,51 @@ class HostTests(ApiTestCase):
             for path in ("/", "/groups", "/api/products", "/static/chart/app.js"):
                 with self.subTest(host=host, path=path):
                     self.assertEqual(client.get(path, headers={"Host": host}).status_code, 403)
+
+
+class AllowedHostsEnvTests(ApiTestCase):
+    def client_with_env(self, **env):
+        with mock.patch.dict(os.environ, env):
+            return self.client()
+
+    def test_host_extra_do_ambiente_passa_e_os_locais_continuam(self):
+        client = self.client_with_env(ALLOWED_HOSTS="precos.example, outro.example")
+        for host in ("precos.example", "outro.example:8000", "localhost", "127.0.0.1"):
+            with self.subTest(host=host):
+                self.assertEqual(client.get("/api/products", headers={"Host": host}).status_code, 200)
+
+    def test_host_fora_da_lista_continua_recusado(self):
+        client = self.client_with_env(ALLOWED_HOSTS="precos.example")
+        self.assertEqual(client.get("/api/products", headers={"Host": "evil.example"}).status_code, 403)
+
+
+class HealthTests(ApiTestCase):
+    def test_ok_com_banco_aberto_no_host_127_0_0_1(self):
+        response = self.client().get("/health", headers={"Host": "127.0.0.1:8000"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "ok"})
+
+    def test_503_sem_detalhes_quando_o_banco_nao_abre(self):
+        client = self.client()
+        for path in self.root.glob("t.sqlite*"):
+            path.unlink()
+        self.db.mkdir()  # um diretório no lugar do arquivo: o SQLite não abre
+        response = client.get("/health")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"status": "erro"})
+
+    def test_host_estranho_continua_recusado(self):
+        self.assertEqual(self.client().get("/health", headers={"Host": "evil.example"}).status_code, 403)
+
+
+class ConnectionPragmaTests(ApiTestCase):
+    def test_conexao_sai_com_wal_timeout_e_chaves_estrangeiras(self):
+        conn = connect(self.root / "novo" / "dir" / "t.sqlite", self.data, self.legacy)
+        self.addCleanup(conn.close)
+        pragma = lambda name: conn.execute(f"PRAGMA {name}").fetchone()[0]
+        self.assertEqual(pragma("journal_mode"), "wal")
+        self.assertEqual(pragma("busy_timeout"), 5000)
+        self.assertEqual(pragma("foreign_keys"), 1)
 
 
 class ImportWithServerTests(ApiTestCase):

@@ -2,21 +2,23 @@
 import dataclasses
 import json
 import logging
+import os
 import re
 import sqlite3
 from pathlib import Path
 
 from flask import Flask, abort, g, jsonify, request, send_file
 
-from . import catalog, importer, shopping
-from .db import connect
+from . import auth, catalog, importer, shopping
+from .db import connect, open_connection
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
-ALLOWED_HOSTS = {"localhost", "127.0.0.1"}
+LOCAL_HOSTS = {"localhost", "127.0.0.1"}
 ACCESS_KEY_RE = re.compile(r"[0-9]{44}")
 MAX_UPLOAD_MB = 20
 MAX_UPLOAD_FILES = 50
 APP_HEADER = "X-Pricetrail"  # enviado pela página /import
+CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SUMMARY_KEYS = {importer.NEW: "new", importer.EXISTING: "existing", importer.ERROR: "error"}
 
 
@@ -24,19 +26,27 @@ class Pairs(list):
     """Objeto JSON lido como lista de pares: guarda nomes repetidos, que um dict esconderia."""
 
 
-def create_app(
-    db_path: Path, data_dir: Path, legacy_dir: Path | None = None, log_file: Path | None = None
-) -> Flask:
-    """log_file recebe o log do upload, no formato do CLI; sem ele, o log fica como estiver."""
-    if log_file is not None:
-        importer.configure_log(log_file)
+def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) -> Flask:
+    """Sobe só com login configurado: sem as variáveis, levanta auth.AuthConfigError."""
+    auth_config = auth.config_from_env()
     connect(db_path, data_dir, legacy_dir).close()  # migra agora: um erro aparece ao subir, não no primeiro request
+    allowed_hosts = LOCAL_HOSTS | {
+        host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()
+    }
     app = Flask(__name__, static_folder=WEB_DIR, static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
     @app.errorhandler(413)
     def too_large(_error):
         return jsonify(error=f"Envio acima de {MAX_UPLOAD_MB} MB: envie menos arquivos de cada vez."), 413
+
+    @app.errorhandler(sqlite3.OperationalError)
+    def database_busy(error: sqlite3.OperationalError):
+        """Outra conexão segurou a escrita além do busy_timeout: 503 em vez de 500 com traceback."""
+        if "database is locked" not in str(error):
+            raise error
+        logging.getLogger("pricetrail").warning("banco ocupado: database is locked", extra={"path": request.path})
+        return jsonify(error="Banco ocupado, tente de novo."), 503
 
     def db() -> sqlite3.Connection:
         """Uma conexão por request: o servidor atende em várias threads."""
@@ -53,8 +63,31 @@ def create_app(
     @app.before_request
     def refuse_foreign_host() -> None:
         """Contra DNS rebinding: um site externo não pode se passar pelo servidor local."""
-        if request.host.split(":")[0].lower() not in ALLOWED_HOSTS:
+        if request.host.split(":")[0].lower() not in allowed_hosts:
             abort(403)
+
+    @app.before_request
+    def refuse_foreign_origin():
+        """Contra envio de outro site: o que altera dados, quando traz Origin, precisa vir do próprio servidor."""
+        origin = request.headers.get("Origin")
+        if request.method in CHANGING_METHODS and origin is not None and origin != request.host_url.rstrip("/"):
+            return jsonify(error="Envio recusado: a requisição veio de outro site."), 403
+        return None
+
+    auth.install(app, auth_config, db)
+
+    @app.get("/health")
+    def health():
+        """Conexão nova, sem migrar nem tocar nos PDFs; o corpo do erro não traz detalhes."""
+        try:
+            conn = open_connection(db_path)
+            try:
+                conn.execute("SELECT 1").fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            return jsonify(status="erro"), 503
+        return jsonify(status="ok")
 
     @app.get("/")
     def chart_page():
@@ -132,13 +165,10 @@ def create_app(
     def sent_by_this_app() -> bool:
         """Contra envio de outro site: um formulário multipart não passa por preflight de CORS.
 
-        O cabeçalho próprio força o preflight, que o servidor não autoriza. O Origin,
-        quando vem, precisa ser o próprio servidor.
+        O cabeçalho próprio força o preflight, que o servidor não autoriza. O Origin
+        já foi conferido em refuse_foreign_origin.
         """
-        if request.headers.get(APP_HEADER) != "1":
-            return False
-        origin = request.headers.get("Origin")
-        return origin is None or origin == request.host_url.rstrip("/")
+        return request.headers.get(APP_HEADER) == "1"
 
     @app.get("/import")
     def import_page():
@@ -164,9 +194,10 @@ def create_app(
         summary = {"new": 0, "existing": 0, "error": 0}
         for result in results:
             summary[SUMMARY_KEYS[result.status]] += 1
-        logging.getLogger("pricetrail").info(
-            "upload: %d novas, %d já existentes, %d com erro", summary["new"], summary["existing"], summary["error"]
-        )
+        log = logging.getLogger("pricetrail")
+        for result in results:
+            log.info("upload: arquivo", extra={"access_key": result.access_key, "status": result.status})
+        log.info("upload: resumo", extra={"summary": summary})
         return jsonify(results=[dataclasses.asdict(result) for result in results], summary=summary)
 
     @app.get("/notes/<access_key>.pdf")

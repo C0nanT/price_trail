@@ -1,12 +1,17 @@
 """Base dos testes da API: banco, pasta de dados e curadoria antiga em uma pasta temporária."""
 import contextlib
+import functools
 import io
 import json
+import logging
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+from argon2 import PasswordHasher
 
 from pricetrail import cli, importer, nfce
 from pricetrail.db import connect
@@ -15,6 +20,14 @@ from tests.fixtures import make_key, make_text
 
 CNPJ = "75315333029000"
 CNPJ_TEXT = "75.315.333/0290-00"
+TEST_USER = "dono"
+TEST_PASSWORD = "senha de teste"
+
+
+@functools.cache
+def test_password_hash():
+    """Hash de teste com argon2 barato: o verify lê os parâmetros do próprio hash."""
+    return PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash(TEST_PASSWORD)
 
 
 def item(code, description="DET YPE", unit="UND9", price="5,00"):
@@ -51,9 +64,27 @@ class ApiTestCase(unittest.TestCase):
         self.data.mkdir()
         # O pdftotext é a fronteira externa: aqui o "PDF" é o próprio texto da nota.
         self.pdftotext_calls = []
+        self.addCleanup(self.close_log_files)
         patcher = mock.patch("subprocess.run", self.fake_pdftotext)
         patcher.start()
         self.addCleanup(patcher.stop)
+        env = mock.patch.dict(os.environ, {
+            "AUTH_USERNAME": TEST_USER,
+            "AUTH_PASSWORD_HASH": test_password_hash(),
+            "SECRET_KEY": "chave de teste com mais de trinta e dois bytes",
+        })
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("SESSION_COOKIE_SECURE", None)
+
+    @staticmethod
+    def close_log_files():
+        """O import grava num arquivo temporário: solta o handler antes de a pasta sumir."""
+        log = logging.getLogger("pricetrail")
+        for handler in list(log.handlers):
+            if isinstance(handler, logging.FileHandler):
+                log.removeHandler(handler)
+                handler.close()
 
     def fake_pdftotext(self, command, **_kwargs):
         self.pdftotext_calls.append(command)
@@ -63,8 +94,37 @@ class ApiTestCase(unittest.TestCase):
     def write_legacy(self, name, content):
         (self.legacy / name).write_text(json.dumps(content), encoding="utf-8")
 
+    def anon_client(self, ip="127.0.0.1"):
+        """Cliente sem sessão. O IP chega como o Traefik o entrega, no X-Forwarded-For."""
+        client = create_app(self.db, self.data, self.legacy).test_client()
+        client.environ_base["HTTP_X_FORWARDED_FOR"] = ip
+        return client
+
     def client(self):
-        return create_app(self.db, self.data, self.legacy).test_client()
+        """Cliente já logado, com o cookie da sessão em cada host aceito (há testes que trocam o Host).
+
+        Loga uma vez por teste e reaproveita o cookie: todo login, certo ou errado, conta no teto
+        global de tentativas, e há testes que pedem muitos clientes.
+        """
+        client = self.anon_client()
+        if getattr(self, "_session_cookie", None) is None:
+            response = self.login(client)
+            self.assertEqual(response.status_code, 200)
+            self._session_cookie = client.get_cookie("session")
+        cookie = self._session_cookie
+        extra = {host.strip().lower() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()}
+        for host in {"localhost", "127.0.0.1"} | extra:
+            client.set_cookie("session", cookie.value, domain=host)
+        return client
+
+    @staticmethod
+    def csrf_token(client):
+        return client.get("/api/session").get_json()["csrfToken"]
+
+    def login(self, client, username=TEST_USER, password=TEST_PASSWORD, next=None, token=None):
+        token = self.csrf_token(client) if token is None else token
+        return client.post("/api/login", json={"username": username, "password": password, "next": next},
+                           headers={"X-CSRF-Token": token})
 
     def add_note(self, *items, **note):
         """Grava a nota sem PDF nenhum na pasta de dados."""

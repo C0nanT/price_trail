@@ -51,15 +51,22 @@ então PDF repetido não duplica dados, mesmo com outro nome de arquivo.
 Com o servidor ligado (veja abaixo), também dá para importar pela página
 <http://127.0.0.1:8000/import>: escolha ou arraste um ou vários PDFs. Cada nota nova é
 guardada em `data/` como `AAAA-MM-DD_<chave>.pdf`; arquivo com erro não é guardado.
-O envio tem limite de 20 MB e registra no mesmo log do `import` (`serve --log` escolhe o arquivo).
+O envio tem limite de 20 MB; o servidor loga em JSON (stdout até INFO, stderr de WARNING em diante, nível em `LOG_LEVEL`), sem nomes de arquivo, lojas nem textos de notas.
 
 ## Ver o gráfico
+
+O login é obrigatório, também no servidor local. Uma vez: copie `.env.example` para `.env`,
+troque `AUTH_USERNAME`, `AUTH_PASSWORD_HASH` (gere com `python3 -m pricetrail hash-password`) e
+`SECRET_KEY`, e ponha `SESSION_COOKIE_SECURE=0` (local é HTTP); deixe `DB_PATH` e `DATA_DIR`
+comentados. O `make` carrega o `.env`. Sem essas variáveis o servidor recusa subir.
 
 Inicie o servidor local e abra <http://127.0.0.1:8000/> no navegador:
 
 ```bash
-python3 -m pricetrail serve
+make serve
 ```
+
+(`python3 -m pricetrail serve` também funciona, se o ambiente já tiver as variáveis.)
 
 A página lê direto do banco: depois de importar notas, basta recarregar. Dá para
 importar com o servidor ligado. O servidor só aceita conexões da sua máquina, porque
@@ -94,7 +101,7 @@ arquivos continuam sendo processados. Nesse caso, o comando termina com código 
 
 ## Dados salvos
 
-O banco fica em `pricetrail.sqlite`:
+O banco fica em `pricetrail.sqlite` (em produção, `/data/app.db`):
 
 - `notes`: estabelecimento, endereço, data de emissão, totais e desconto
 - `items`: produtos da nota, com quantidade, unidade e preços
@@ -181,7 +188,173 @@ Para recriar o banco do zero (outra máquina, ou banco perdido):
 1. Coloque os PDFs em `data/` e rode `python3 -m pricetrail import`.
 2. Rode `python3 -m pricetrail restore curadoria.json`.
 
-Os PDFs não entram no repositório; guarde-os à parte.
+Os PDFs não entram no repositório; guarde-os à parte. Em produção, o backup do banco é outro (veja "Produção (Docker)").
+
+## Produção (Docker)
+
+A imagem (gunicorn, 1 worker) é publicada pelo CI em `ghcr.io/c0nant/price_trail` e roda atrás do
+Traefik da VPS, em `compras.conantorres.dev`. O `docker-compose.yml` não publica porta: todo o
+tráfego entra pela Cloudflare e pelo Traefik, pela rede externa `proxy`. A VPS nunca compila.
+O fluxo local continua sendo `make serve`.
+
+**Réplica única, disco local.** O SQLite tem um escritor por vez e o app foi feito para um só
+container: nunca escale o serviço (`--scale`, réplicas) e mantenha o volume `price_trail_data` em
+disco local, nunca em NFS (o WAL não funciona direito em rede).
+
+### Variáveis (`.env`)
+
+Copie `.env.example` para `.env` (nunca versionado; na VPS fica ao lado do `docker-compose.yml`).
+O login é sempre ligado: sem `AUTH_USERNAME`, `AUTH_PASSWORD_HASH` e `SECRET_KEY` o servidor
+recusa subir.
+
+| Variável | Para quê |
+| --- | --- |
+| `AUTH_USERNAME` | Usuário único do login. |
+| `AUTH_PASSWORD_HASH` | Hash argon2 da senha, **entre aspas simples** (o `$` seria interpolado pelo Compose). |
+| `SECRET_KEY` | Assina o cookie de sessão; trocar derruba as sessões. |
+| `SESSION_COOKIE_SECURE` | `1` em produção; `0` só para testar por HTTP. |
+| `ALLOWED_HOSTS` | Hosts aceitos, separados por vírgula; mantenha `127.0.0.1` (healthcheck). |
+| `FORWARDED_ALLOW_IPS` | Sub-rede da rede `proxy` (`docker network inspect proxy`, campo `Subnet`): só ela pode mandar `X-Forwarded-*`. É dela que vem o IP real do cliente no bloqueio de login. |
+| `LOG_LEVEL` | `DEBUG`, `INFO` (padrão), `WARNING` ou `ERROR`. |
+| `IMAGE_TAG` | Tag da imagem: `latest` (padrão) ou o SHA de um commit. |
+| `BACKUP_KEEP` | Quantos backups manter em `/data/backups` (padrão 14). |
+
+`DB_PATH` e `DATA_DIR` já vêm certos na imagem (`/data/app.db` e `/data/pdfs`).
+
+Gerar o `SECRET_KEY` e o hash da senha:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+docker compose run --rm web python -m pricetrail hash-password   # pede a senha duas vezes, sem eco
+```
+
+O segundo comando, local, é `python3 -m pricetrail hash-password`. Cole o resultado no `.env`
+entre aspas simples.
+
+O login erra 3 vezes seguidas por IP e bloqueia esse IP por 20 minutos; 10 falhas em 24h, somando
+todos os IPs, bloqueiam tudo (inclusive a senha certa) até a falha mais antiga sair da janela.
+Os eventos saem nos logs (`login_falhou`, `login_bloqueado`, `teto_global_atingido`).
+
+### Subir local com volume de teste
+
+Para conferir a imagem sem tocar na VPS, use um projeto, uma imagem e um volume descartáveis, com
+um override só local (não faz parte do deploy). O `.env` de teste precisa de `SESSION_COOKIE_SECURE=0`
+(HTTP) e de `FORWARDED_ALLOW_IPS` com a sub-rede da rede de teste.
+
+```bash
+docker build -t price_trail:teste .
+docker network create proxy_teste
+docker network inspect proxy_teste | grep Subnet     # vai em FORWARDED_ALLOW_IPS no .env
+cat > docker-compose.teste.yml <<'EOF'
+services:
+  web:
+    image: price_trail:teste
+    labels: !reset []
+    ports:
+      - "127.0.0.1:8000:8000"
+networks:
+  proxy:
+    name: proxy_teste
+EOF
+docker compose -p pt_teste -f docker-compose.yml -f docker-compose.teste.yml up -d
+docker compose -p pt_teste ps          # espera o "healthy"
+docker compose -p pt_teste logs web    # uma linha JSON por evento, inclusive o acesso do gunicorn
+```
+
+Abra <http://127.0.0.1:8000/>. Para limpar tudo: `docker compose -p pt_teste -f docker-compose.yml
+-f docker-compose.teste.yml down -v && docker network rm proxy_teste`.
+
+### Logs
+
+Tudo sai em JSON, uma linha por evento: stdout até `INFO` (inclui o acesso do gunicorn, sem query
+string nem corpo) e stderr de `WARNING` em diante. O driver é `json-file`, com rotação de 10 MB x 5
+arquivos. Os logs não levam nomes de arquivo, lojas, CNPJ completo nem senhas.
+
+### Backup e restauração
+
+`python -m pricetrail backup` faz `VACUUM INTO` com o app rodando (nunca copia o arquivo, que tem
+`-wal`/`-shm`) e grava `/data/backups/app-AAAAMMDD-HHMMSS.db`. Mantém os `BACKUP_KEEP` mais novos
+(padrão 14, definido no `.env`) e loga uma linha JSON com nome, tamanho, quantos apagou e duração.
+Roda como o usuário da imagem, com `read_only`: só `/data` é gravável.
+
+Cron da VPS (`crontab -e`), todo dia às 03:15:
+
+```
+15 3 * * * cd /opt/apps/price_trail && docker compose exec -T web python -m pricetrail backup >> /var/log/price_trail-backup.log 2>&1
+```
+
+Para testar à mão, rode o mesmo comando sem o `>>` e confira o arquivo:
+`docker compose exec -T web ls -l /data/backups`.
+
+Restaurar um backup (o volume é `price_trail_data`; troque `app-AAAAMMDD-HHMMSS.db` pelo arquivo escolhido):
+
+```bash
+cd /opt/apps/price_trail
+docker compose stop web
+docker compose run --rm --no-deps --user root --entrypoint sh web -c \
+  'cp /data/backups/app-AAAAMMDD-HHMMSS.db /data/app.db \
+   && rm -f /data/app.db-wal /data/app.db-shm \
+   && chown 10001:10001 /data/app.db'
+docker compose up -d
+```
+
+O `-wal`/`-shm` antigo precisa sumir: misturado com o `app.db` restaurado, corrompe o banco.
+Os backups ficam no mesmo volume do banco; para proteção contra perda do disco, copie
+`/data/backups` para fora da VPS (por exemplo `docker compose cp web:/data/backups ./backups` e depois `rsync`).
+Os PDFs (`/data/pdfs`) não entram nesse backup, que cobre só o SQLite: guarde-os à parte.
+
+### Atualizar e voltar uma versão (rollback)
+
+O cron da VPS faz `docker compose pull && docker compose up -d`. Cada push na `main` publica
+`:latest` e `:<sha do commit>`. Para voltar uma versão, fixe o SHA no `.env` e suba de novo:
+
+```bash
+# .env
+IMAGE_TAG=<sha do commit bom>
+docker compose pull && docker compose up -d
+```
+
+Volte a `IMAGE_TAG=latest` para seguir a versão mais nova. O banco só migra para frente: depois de
+uma versão que migrou o banco, voltar a imagem não desfaz a migração (restaure um backup se precisar).
+
+### Migrar os dados atuais para o volume
+
+`pricetrail.sqlite` vira `app.db` e a pasta `data/` vira `pdfs/`, mantendo as subpastas (o caminho de
+cada nota é relativo a ela). **Feche o servidor local antes**: o banco está em WAL e o que ainda está
+no `-wal` se perderia numa cópia crua. Uma cópia consistente, mesmo com ele ligado, sai de:
+
+```bash
+mkdir -p migracao
+python3 -c "import sqlite3; sqlite3.connect('pricetrail.sqlite').execute(\"VACUUM INTO 'migracao/app.db'\")"
+cp -a data migracao/pdfs
+```
+
+Copie a pasta `migracao/` para a VPS e, com o serviço parado (ou recém-criado, veja o checklist),
+leve tudo para o volume com um container temporário:
+
+```bash
+docker compose stop web
+docker compose run --rm --no-deps --user root -v "$PWD/migracao:/origem:ro" --entrypoint sh web -c \
+  'cp /origem/app.db /data/app.db \
+   && rm -f /data/app.db-wal /data/app.db-shm \
+   && mkdir -p /data/pdfs && cp -a /origem/pdfs/. /data/pdfs/ \
+   && chown -R 10001:10001 /data/app.db /data/pdfs'
+docker compose up -d
+```
+
+### Checklist fora do código
+
+1. **Cloudflare:** registro DNS `compras` (A/AAAA para o IP da VPS), com a nuvem laranja.
+2. **VPS:**
+   - criar `/opt/apps/price_trail/` e copiar `docker-compose.yml` e o `.env` (gere `SECRET_KEY` e o hash como acima);
+   - `docker network inspect proxy` e colocar a sub-rede em `FORWARDED_ALLOW_IPS`;
+   - `docker login ghcr.io` com um token `read:packages`, se ainda não fez;
+   - `docker compose up -d` uma vez, para criar o volume `price_trail_data`;
+   - copiar o banco atual (como `app.db`) e a pasta `data/` (como `pdfs/`) para o volume, com o container temporário acima (que já faz o `chown -R 10001:10001`);
+   - `docker compose restart`.
+3. **Cron da VPS:** agendar o backup diário (linha acima).
+4. Considerar o **Cloudflare Access** na frente de `compras.conantorres.dev`, já que são dados de compras: a autenticação da Cloudflare antes da do app.
+5. Medir a memória estável com `docker stats` depois de uns dias e ajustar `mem_limit` (regra da casa: limite ≥ uso / 0,7).
 
 ## Estilo (Tailwind)
 

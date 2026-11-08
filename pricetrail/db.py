@@ -253,8 +253,25 @@ def migration_4(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: P
     conn.execute("CREATE INDEX group_refs_group_id ON group_refs (group_id)")
 
 
+def migration_5(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Tentativas de login (ver login_limit): por IP e os instantes de falha da janela global. Tempos em epoch (s)."""
+    conn.execute(
+        """
+CREATE TABLE login_attempts (
+    ip              TEXT PRIMARY KEY,
+    failures        INTEGER NOT NULL,
+    last_failure_at INTEGER NOT NULL,
+    locked_until    INTEGER
+)
+"""
+    )
+    conn.execute("CREATE INDEX login_attempts_last_failure_at ON login_attempts (last_failure_at)")
+    conn.execute("CREATE TABLE login_failures (at INTEGER NOT NULL)")
+    conn.execute("CREATE INDEX login_failures_at ON login_failures (at)")
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2, migration_3, migration_4)
+MIGRATIONS = (migration_1, migration_2, migration_3, migration_4, migration_5)
 
 
 def user_version(conn: sqlite3.Connection) -> int:
@@ -276,16 +293,33 @@ def migrate(conn: sqlite3.Connection, data_dir: Path | None, legacy_dir: Path | 
             conn.execute(f"PRAGMA user_version = {version}")
 
 
+# Quanto uma conexão espera por outra que está escrevendo antes de dar "database is locked".
+BUSY_TIMEOUT_MS = 5000
+
+
+def open_connection(path: Path) -> sqlite3.Connection:
+    """Abre o banco com os PRAGMAs de toda conexão, sem criar pasta nem migrar."""
+    conn = sqlite3.connect(path)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        conn.execute("PRAGMA foreign_keys = ON")
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
 def connect(path: Path, data_dir: Path | None = None, legacy_dir: Path | None = None) -> sqlite3.Connection:
-    """Abre o banco, liga as chaves estrangeiras e aplica as migrações pendentes.
+    """Abre o banco (criando a pasta, se faltar), liga WAL, busy_timeout e as chaves estrangeiras e aplica as migrações pendentes.
 
     data_dir é a pasta dos PDFs e legacy_dir a dos JSONs da curadoria antiga. As
     duas só são lidas pelas migrações que fazem a carga inicial: o banco já migrado
     não as usa. Migrar um banco com notas sem data_dir levanta MigrationError.
     """
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = open_connection(path)
     try:
         migrate(conn, data_dir, legacy_dir)
     except BaseException:
