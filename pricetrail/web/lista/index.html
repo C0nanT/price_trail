@@ -20,11 +20,14 @@
     <h1 class="mb-1 text-2xl font-bold leading-tight">Lista de compras</h1>
     <button type="button" data-logout class="inline-flex min-h-touch shrink-0 items-center px-3 text-sm font-semibold text-muted underline hover:text-ink">Sair</button>
   </div>
-  <p class="mb-4 text-sm text-muted">Preço médio das notas desde <span id="since">…</span> (6 meses). As marcações ficam salvas neste aparelho.</p>
+  <p class="mb-4 text-sm text-muted">Preço médio das notas desde <span id="since">…</span> (6 meses). As marcações são compartilhadas entre os aparelhos e atualizam a cada 10 segundos.</p>
   <p id="error" class="alert mb-4" role="alert" hidden></p>
   <div class="sticky top-0 z-[5] -mx-4 mb-4 flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2">
     <p id="progress" class="text-lg font-semibold" role="status" aria-live="polite"></p>
-    <button id="reset" type="button" class="btn">Desmarcar tudo</button>
+    <div class="flex gap-2">
+      <button id="refresh" type="button" class="btn">Atualizar <span id="countdown" class="tabular-nums text-muted"></span></button>
+      <button id="reset" type="button" class="btn">Desmarcar tudo</button>
+    </div>
   </div>
   <div id="sections" class="grid gap-6"></div>
 </main>

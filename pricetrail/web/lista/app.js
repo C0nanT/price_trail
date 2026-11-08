@@ -1,23 +1,10 @@
 "use strict";
 // Lista de compras da semana: itens e preços vêm de /api/shopping-list (média dos últimos 6 meses);
-// as marcações ficam no localStorage do aparelho.
+// as marcações ficam no servidor (/api/shopping-list/checked) e a página as relê a cada POLL_MS,
+// para refletir o que outro aparelho marcou ou desmarcou.
 
-const STORAGE_KEY = "pricetrail:lista:marcados";
-
-// O localStorage pode falhar (aba privada, dados bloqueados): a lista segue funcionando, sem salvar.
-function loadChecked(names) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(saved)) return new Set(saved.filter((name) => names.has(name)));
-  } catch { /* usa a lista vazia */ }
-  return new Set();
-}
-
-function saveChecked() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...checked]));
-  } catch { /* sem armazenamento: só não persiste */ }
-}
+const POLL_MS = 10000;
+const CHECKED_URL = "/api/shopping-list/checked";
 
 let checked = new Set();
 let total = 0;
@@ -52,8 +39,11 @@ function itemRow(item) {
     else checked.delete(item.name);
     paint();
     dim();
-    saveChecked();
     updateProgress();
+    pending += 1;
+    fetchJson(CHECKED_URL, { method: "PUT", body: { name: item.name, checked: box.checked } })
+      .catch((error) => showError("a marcação", error))
+      .finally(() => { pending -= 1; });
   });
   label.append(box, text);
   li.append(label);
@@ -81,19 +71,57 @@ function updateProgress() {
 }
 
 let current = [];
+let names = new Set();
+let pending = 0; // marcações enviadas e ainda sem resposta: a leitura periódica espera por elas
+
+function applyChecked(list) {
+  const next = new Set(list.filter((name) => names.has(name)));
+  if (next.size === checked.size && [...next].every((name) => checked.has(name))) return;
+  checked = next;
+  render(current);
+}
+
+let secondsLeft = POLL_MS / 1000;
+
+function showCountdown() {
+  el("countdown").textContent = `(${secondsLeft}s)`;
+}
+
+async function refreshChecked({ manual = false } = {}) {
+  secondsLeft = POLL_MS / 1000;
+  showCountdown();
+  if (!manual && (pending > 0 || document.hidden)) return;
+  try {
+    const data = await fetchJson(CHECKED_URL);
+    if (pending === 0) applyChecked(data.checked);
+    if (manual) el("error").hidden = true;
+  } catch (error) {
+    // No ciclo automático, sem rede agora: tenta de novo no próximo. No botão, avisa.
+    if (manual) showError("as marcações", error);
+  }
+}
+
+el("refresh").addEventListener("click", () => refreshChecked({ manual: true }));
 
 el("reset").addEventListener("click", () => {
   if (checked.size === 0 || !confirm("Desmarcar todos os itens?")) return;
   checked.clear();
-  saveChecked();
   render(current);
+  fetchJson(CHECKED_URL, { method: "DELETE" }).catch((error) => showError("a lista", error));
 });
 
-fetchJson("/api/shopping-list").then((data) => {
+Promise.all([fetchJson("/api/shopping-list"), fetchJson(CHECKED_URL)]).then(([data, saved]) => {
   current = data.sections;
-  const names = new Set(current.flatMap((section) => section.items.map((item) => item.name)));
+  names = new Set(current.flatMap((section) => section.items.map((item) => item.name)));
   total = names.size;
-  checked = loadChecked(names);
+  checked = new Set(saved.checked.filter((name) => names.has(name)));
   el("since").textContent = dateFormat.format(new Date(`${data.since}T00:00:00`));
   render(current);
+  showCountdown();
+  setInterval(() => {
+    secondsLeft -= 1;
+    if (secondsLeft <= 0) refreshChecked();
+    else showCountdown();
+  }, 1000);
+  document.addEventListener("visibilitychange", () => refreshChecked());
 }, (error) => showError("a lista", error));

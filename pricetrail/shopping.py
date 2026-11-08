@@ -106,3 +106,20 @@ def build_list(conn: sqlite3.Connection) -> dict:
             rows.append(row)
         sections.append({"title": title, "items": rows})
     return {"since": since.isoformat(), "sections": sections}
+
+
+def checked_names(conn) -> list[str]:
+    return [row[0] for row in conn.execute("SELECT name FROM shopping_checks ORDER BY name")]
+
+
+def set_checked(conn, name: str, checked: bool) -> None:
+    with conn:
+        if checked:
+            conn.execute("INSERT OR IGNORE INTO shopping_checks (name) VALUES (?)", (name,))
+        else:
+            conn.execute("DELETE FROM shopping_checks WHERE name = ?", (name,))
+
+
+def clear_checked(conn) -> None:
+    with conn:
+        conn.execute("DELETE FROM shopping_checks")

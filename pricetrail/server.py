@@ -105,6 +105,23 @@ def create_app(db_path: Path, data_dir: Path, legacy_dir: Path | None = None) ->
     def shopping_list():
         return jsonify(shopping.build_list(db()))
 
+    @app.get("/api/shopping-list/checked")
+    def shopping_checked():
+        return jsonify(checked=shopping.checked_names(db()))
+
+    @app.put("/api/shopping-list/checked")
+    def shopping_check():
+        body = request.get_json(silent=True) if request.is_json else None
+        if not isinstance(body, dict) or not isinstance(body.get("name"), str) or not isinstance(body.get("checked"), bool):
+            return jsonify(error='Esperado {"name": texto, "checked": verdadeiro/falso}.'), 422
+        shopping.set_checked(db(), body["name"], body["checked"])
+        return jsonify(checked=shopping.checked_names(db()))
+
+    @app.delete("/api/shopping-list/checked")
+    def shopping_uncheck_all():
+        shopping.clear_checked(db())
+        return jsonify(checked=[])
+
     @app.get("/api/products")
     def products():
         return jsonify(catalog.list_products(db()))

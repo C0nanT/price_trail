@@ -182,13 +182,14 @@ class MigrationTests(ApiTestCase):
         conn.execute("DROP INDEX group_refs_group_id")
         conn.execute("DROP TABLE login_attempts")
         conn.execute("DROP TABLE login_failures")
+        conn.execute("DROP TABLE shopping_checks")
         conn.execute("PRAGMA user_version = 3")
         conn.commit()
         conn.close()
         self.assertEqual(self.products()[0]["description"], "Detergente")
         conn = sqlite3.connect(self.db)
         self.addCleanup(conn.close)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 5)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 6)
         # O índice serve ao join dos grupos e ao ON DELETE CASCADE de product_groups.
         plan = " ".join(row[3] for row in conn.execute(
             "EXPLAIN QUERY PLAN SELECT * FROM group_refs WHERE group_id = 1"))

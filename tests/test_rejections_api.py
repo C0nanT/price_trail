@@ -106,6 +106,7 @@ class RejectionMigrationTests(ApiTestCase):
         conn.execute("DROP INDEX group_refs_group_id")
         conn.execute("DROP TABLE login_attempts")
         conn.execute("DROP TABLE login_failures")
+        conn.execute("DROP TABLE shopping_checks")
         conn.execute("PRAGMA user_version = 2")
         conn.commit()
         conn.close()

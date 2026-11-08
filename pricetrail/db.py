@@ -270,8 +270,13 @@ CREATE TABLE login_attempts (
     conn.execute("CREATE INDEX login_failures_at ON login_failures (at)")
 
 
+def migration_6(conn: sqlite3.Connection, _data_dir: Path | None, _legacy_dir: Path | None) -> None:
+    """Itens marcados na lista de compras, compartilhados entre os aparelhos."""
+    conn.execute("CREATE TABLE shopping_checks (name TEXT PRIMARY KEY)")
+
+
 # A posição na lista é o número da versão: a primeira migração leva à versão 1.
-MIGRATIONS = (migration_1, migration_2, migration_3, migration_4, migration_5)
+MIGRATIONS = (migration_1, migration_2, migration_3, migration_4, migration_5, migration_6)
 
 
 def user_version(conn: sqlite3.Connection) -> int:

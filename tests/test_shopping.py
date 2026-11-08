@@ -53,3 +53,18 @@ class ShoppingListTests(ApiTestCase):
 
     def write_note(self, number, line, issued):
         self.write_pdf(f"n{number}.pdf", line, number=number, issued=issued)
+
+
+class CheckedTests(ApiTestCase):
+    def test_marca_desmarca_e_limpa(self):
+        client = self.client()
+        put = lambda name, checked: client.put("/api/shopping-list/checked", json={"name": name, "checked": checked})
+        self.assertEqual(put("Arroz", True).get_json(), {"checked": ["Arroz"]})
+        self.assertEqual(put("Feijão", True).get_json(), {"checked": ["Arroz", "Feijão"]})
+        self.assertEqual(put("Arroz", False).get_json(), {"checked": ["Feijão"]})
+        self.assertEqual(client.get("/api/shopping-list/checked").get_json(), {"checked": ["Feijão"]})
+        self.assertEqual(client.delete("/api/shopping-list/checked").get_json(), {"checked": []})
+
+    def test_corpo_invalido(self):
+        response = self.client().put("/api/shopping-list/checked", json={"name": "Arroz"})
+        self.assertEqual(response.status_code, 422)
